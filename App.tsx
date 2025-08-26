@@ -4,47 +4,46 @@ import { GameState, AsteroidType, LaserEffect, MathType } from './types';
 
 // --- CONSTANTS ---
 const PLANET_DAMAGE = 20;
-const ASTEROID_SPAWN_INTERVAL = 2800;
+const INITIAL_ASTEROID_SPAWN_INTERVAL = 3000;
 const GAME_LOOP_INTERVAL = 50;
-const ASTEROID_SPEED = 0.5;
-const MAX_ASTEROIDS = 8;
+const INITIAL_ASTEROID_SPEED = 0.4;
+const INITIAL_MAX_ASTEROIDS = 5;
+const ASTEROIDS_PER_WAVE = 10;
+const DIFFICULTY_WAVE_INTERVAL = 5;
+
+const STREAK_FOR_SHIELD = 10;
+const STREAK_FOR_TIME_FREEZE = 20;
+const STREAK_FOR_DOUBLE_LASER = 30;
+const TIME_FREEZE_DURATION = 3000; // 3 seconds
+const DOUBLE_LASER_DURATION = 10000; // 10 seconds
+
 const LOCAL_STORAGE_KEY = 'asteroRakningHighScore';
 
 // --- HELPER FUNCTIONS ---
-const generateProblem = (type: MathType): AsteroidType['problem'] => {
+const generateProblem = (type: MathType, wave: number): AsteroidType['problem'] => {
+  const difficultyLevel = Math.floor(wave / DIFFICULTY_WAVE_INTERVAL);
+
   switch (type) {
     case 'multiplication': {
-      const a = Math.floor(Math.random() * 9) + 2; // 2-10
-      const b = Math.floor(Math.random() * 9) + 2; // 2-10
-      return {
-        question: `${a} × ${b}`,
-        answer: a * b,
-      };
+      const a = Math.floor(Math.random() * (9 + difficultyLevel)) + 2; 
+      const b = Math.floor(Math.random() * 9) + 2; 
+      return { question: `${a} × ${b}`, answer: a * b };
     }
     case 'addition': {
-      const a = Math.floor(Math.random() * 81) + 10; // 10-90
-      const b = Math.floor(Math.random() * 81) + 10; // 10-90
-      return {
-        question: `${a} + ${b}`,
-        answer: a + b,
-      };
+      const a = Math.floor(Math.random() * (81 + difficultyLevel * 10)) + 10; 
+      const b = Math.floor(Math.random() * (81 + difficultyLevel * 10)) + 10;
+      return { question: `${a} + ${b}`, answer: a + b };
     }
     case 'subtraction': {
-      const a = Math.floor(Math.random() * 81) + 20; // 20-100
-      const b = Math.floor(Math.random() * (a - 10)) + 10; // 10 up to a-10
-      return {
-        question: `${a} − ${b}`,
-        answer: a - b,
-      };
+      const a = Math.floor(Math.random() * (81 + difficultyLevel * 15)) + 20;
+      const b = Math.floor(Math.random() * (a - 10)) + 10;
+      return { question: `${a} − ${b}`, answer: a - b };
     }
     case 'division': {
-      const answer = Math.floor(Math.random() * 9) + 2; // 2-10
-      const b = Math.floor(Math.random() * 9) + 2; // 2-10
+      const b = Math.floor(Math.random() * (9 + difficultyLevel)) + 2;
+      const answer = Math.floor(Math.random() * 9) + 2;
       const a = answer * b;
-      return {
-        question: `${a} ÷ ${b}`,
-        answer: answer,
-      };
+      return { question: `${a} ÷ ${b}`, answer: answer };
     }
   }
 };
@@ -69,12 +68,9 @@ const setHighScoreInStorage = (score: number) => {
 };
 
 
-// --- UI COMPONENTS (Defined outside App to prevent re-creation on re-renders) ---
+// --- UI COMPONENTS ---
 
-interface HealthBarProps {
-    health: number;
-}
-const HealthBar: React.FC<HealthBarProps> = ({ health }) => {
+const HealthBar: React.FC<{ health: number }> = ({ health }) => {
     const healthColor = health > 60 ? 'bg-green-500' : health > 30 ? 'bg-yellow-500' : 'bg-red-600';
     return (
         <div className="w-full bg-gray-700 rounded-full h-6 border-2 border-gray-500">
@@ -86,12 +82,7 @@ const HealthBar: React.FC<HealthBarProps> = ({ health }) => {
     );
 };
 
-interface StartScreenProps {
-    onStartGame: (type: MathType) => void;
-    highScore?: number;
-}
-
-const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, highScore }) => (
+const StartScreen: React.FC<{ onStartGame: (type: MathType) => void; highScore: number }> = ({ onStartGame, highScore }) => (
     <div className="text-center text-white flex flex-col items-center justify-center h-full bg-black bg-opacity-50 p-8 rounded-xl max-w-lg mx-auto">
         <h1 className="text-5xl md:text-6xl font-bold text-cyan-300 drop-shadow-[0_0_10px_rgba(0,255,255,0.7)] mb-4" style={{ fontFamily: 'monospace' }}>
             Julias Astero-Räkning
@@ -101,52 +92,22 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, highScore }) => 
         <div className="w-full mt-4">
           <p className="text-xl mb-4 text-gray-200">Välj ett räknesätt för att börja:</p>
           <div className="grid grid-cols-2 gap-4">
-              <button
-                  onClick={() => onStartGame('multiplication')}
-                  className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0"
-              >
-                  Gånger (×)
-              </button>
-              <button
-                  onClick={() => onStartGame('addition')}
-                  className="bg-green-500 hover:bg-green-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-green-700 active:border-b-0"
-              >
-                  Plus (+)
-              </button>
-              <button
-                  onClick={() => onStartGame('subtraction')}
-                  className="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-yellow-700 active:border-b-0"
-              >
-                  Minus (−)
-              </button>
-              <button
-                  onClick={() => onStartGame('division')}
-                  className="bg-purple-500 hover:bg-purple-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-purple-700 active:border-b-0"
-              >
-                  Delat (÷)
-              </button>
+              <button onClick={() => onStartGame('multiplication')} className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0">Gånger (×)</button>
+              <button onClick={() => onStartGame('addition')} className="bg-green-500 hover:bg-green-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-green-700 active:border-b-0">Plus (+)</button>
+              <button onClick={() => onStartGame('subtraction')} className="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-yellow-700 active:border-b-0">Minus (−)</button>
+              <button onClick={() => onStartGame('division')} className="bg-purple-500 hover:bg-purple-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-purple-700 active:border-b-0">Delat (÷)</button>
           </div>
         </div>
     </div>
 );
 
-interface GameOverScreenProps {
-    onGoToStart: () => void;
-    score?: number;
-    highScore?: number;
-}
-const GameOverScreen: React.FC<GameOverScreenProps> = ({ onGoToStart, score, highScore }) => (
+const GameOverScreen: React.FC<{ onGoToStart: () => void; score: number; highScore: number }> = ({ onGoToStart, score, highScore }) => (
     <div className="text-center text-white flex flex-col items-center justify-center h-full bg-black bg-opacity-50 p-8 rounded-xl">
         <h2 className="text-5xl font-bold text-red-500 mb-4">Spelet Över</h2>
         <p className="text-xl mb-4">Bra kämpat, Julia!</p>
         <p className="text-2xl mb-4">Din poäng: <span className="font-bold text-white">{score}</span></p>
         <p className="text-2xl mb-8">Högsta poäng: <span className="font-bold text-yellow-300">{highScore}</span></p>
-        <button
-            onClick={onGoToStart}
-            className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-4 px-8 rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0"
-        >
-            Tillbaka till Start
-        </button>
+        <button onClick={onGoToStart} className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-4 px-8 rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0">Tillbaka till Start</button>
     </div>
 );
 
@@ -165,6 +126,18 @@ export default function App() {
     const [isShaking, setIsShaking] = useState(false);
     const [isHit, setIsHit] = useState(false);
     const [showWrongFeedback, setShowWrongFeedback] = useState(false);
+    
+    // New state for advanced features
+    const [streak, setStreak] = useState(0);
+    const [wave, setWave] = useState(1);
+    const [asteroidsDestroyedThisWave, setAsteroidsDestroyedThisWave] = useState(0);
+    const [gameSpeed, setGameSpeed] = useState(INITIAL_ASTEROID_SPEED);
+    const [maxAsteroids, setMaxAsteroids] = useState(INITIAL_MAX_ASTEROIDS);
+    const [spawnInterval, setSpawnInterval] = useState(INITIAL_ASTEROID_SPAWN_INTERVAL);
+    const [powerUps, setPowerUps] = useState({ shield: false, timeFreeze: false, doubleLaser: false });
+    const [powerUpMessage, setPowerUpMessage] = useState<string | null>(null);
+    const powerUpMessageTimer = useRef<number | null>(null);
+
     const inputRef = useRef<HTMLInputElement>(null);
     const wrongAnswerSoundRef = useRef<HTMLAudioElement>(null);
 
@@ -172,12 +145,27 @@ export default function App() {
       setHighScore(getHighScoreFromStorage());
     }, []);
 
+    const showPowerUpMessage = (message: string) => {
+        if (powerUpMessageTimer.current) {
+            clearTimeout(powerUpMessageTimer.current);
+        }
+        setPowerUpMessage(message);
+        powerUpMessageTimer.current = window.setTimeout(() => setPowerUpMessage(null), 3000);
+    };
+
     const startGame = useCallback((type: MathType) => {
         setMathType(type);
         setScore(0);
         setHealth(100);
         setAsteroids([]);
         setUserInput('');
+        setStreak(0);
+        setWave(1);
+        setAsteroidsDestroyedThisWave(0);
+        setGameSpeed(INITIAL_ASTEROID_SPEED);
+        setMaxAsteroids(INITIAL_MAX_ASTEROIDS);
+        setSpawnInterval(INITIAL_ASTEROID_SPAWN_INTERVAL);
+        setPowerUps({ shield: false, timeFreeze: false, doubleLaser: false });
         setGameState('playing');
         setTimeout(() => inputRef.current?.focus(), 100);
     }, []);
@@ -195,45 +183,66 @@ export default function App() {
         setHighScoreInStorage(newHighScore);
       }
     }, [score, highScore]);
+    
+    // Wave and difficulty progression
+    useEffect(() => {
+        if (asteroidsDestroyedThisWave >= ASTEROIDS_PER_WAVE) {
+            setWave(w => w + 1);
+            setAsteroidsDestroyedThisWave(0);
+        }
+    }, [asteroidsDestroyedThisWave]);
 
+    useEffect(() => {
+        if (wave > 1 && (wave - 1) % DIFFICULTY_WAVE_INTERVAL === 0) {
+            setGameSpeed(s => s + 0.05);
+            setMaxAsteroids(m => m + 1);
+            setSpawnInterval(i => Math.max(1000, i - 200));
+            showPowerUpMessage(`Våg ${wave}! Det blir svårare!`);
+        }
+    }, [wave]);
+
+    // Main Game Loop
     useEffect(() => {
         if (gameState !== 'playing' || !mathType) return;
 
         const spawnAsteroid = () => {
           setAsteroids(prev => {
-            if (prev.length >= MAX_ASTEROIDS) return prev;
+            if (prev.length >= maxAsteroids) return prev;
             const newAsteroid: AsteroidType = {
-              id: Date.now(),
-              problem: generateProblem(mathType),
-              position: {
-                top: -10,
-                left: Math.random() * 80 + 10,
-              },
-              size: Math.random() * 4 + 8, // size in vw
+              id: Date.now() + Math.random(),
+              problem: generateProblem(mathType, wave),
+              position: { top: -10, left: Math.random() * 80 + 10 },
+              size: Math.random() * 4 + 8,
               rotation: Math.random() * 360,
             };
             return [...prev, newAsteroid];
           });
         };
 
-        const spawnInterval = setInterval(spawnAsteroid, ASTEROID_SPAWN_INTERVAL);
+        const spawnTimer = setInterval(spawnAsteroid, spawnInterval);
 
         const gameLoop = setInterval(() => {
+            if (powerUps.timeFreeze) return;
+
             let healthLost = 0;
             setAsteroids(prevAsteroids => {
-                const updated = prevAsteroids.map(a => ({
-                    ...a,
-                    position: { ...a.position, top: a.position.top + ASTEROID_SPEED },
-                }));
-
+                const updated = prevAsteroids.map(a => ({ ...a, position: { ...a.position, top: a.position.top + gameSpeed }}));
                 const hitAsteroids = updated.filter(a => a.position.top > 90);
+                
                 if (hitAsteroids.length > 0) {
-                    healthLost = hitAsteroids.length * PLANET_DAMAGE;
-                    setIsHit(true);
-                    setTimeout(() => setIsHit(false), 500);
+                    if (powerUps.shield) {
+                        setPowerUps(p => ({ ...p, shield: false }));
+                        showPowerUpMessage("Skölden skyddade dig!");
+                        // Remove just one asteroid that hit
+                         return updated.filter(a => a.id !== hitAsteroids[0].id);
+                    } else {
+                        healthLost = hitAsteroids.length * PLANET_DAMAGE;
+                        setIsHit(true);
+                        setTimeout(() => setIsHit(false), 500);
+                        return updated.filter(a => a.position.top <= 90);
+                    }
                 }
-
-                return updated.filter(a => a.position.top <= 90);
+                return updated;
             });
             
             if (healthLost > 0) {
@@ -242,10 +251,10 @@ export default function App() {
         }, GAME_LOOP_INTERVAL);
         
         return () => {
-            clearInterval(spawnInterval);
+            clearInterval(spawnTimer);
             clearInterval(gameLoop);
         };
-    }, [gameState, mathType]);
+    }, [gameState, mathType, gameSpeed, maxAsteroids, spawnInterval, powerUps.timeFreeze, powerUps.shield, wave]);
 
     useEffect(() => {
         if (health <= 0 && gameState === 'playing') {
@@ -260,9 +269,7 @@ export default function App() {
             y: 100 - asteroid.position.top
         };
         setLasers(prev => [...prev, newLaser]);
-        setTimeout(() => {
-            setLasers(prev => prev.filter(l => l.id !== newLaser.id));
-        }, 200);
+        setTimeout(() => setLasers(prev => prev.filter(l => l.id !== newLaser.id)), 200);
     };
 
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -278,11 +285,46 @@ export default function App() {
         const targetAsteroid = asteroids.find(a => a.problem.answer === answer);
 
         if (targetAsteroid) {
-            setScore(s => s + 10);
+            // Correct answer logic
+            const newStreak = streak + 1;
+            setStreak(newStreak);
+
+            const bonusPoints = Math.min(50, (newStreak - 1) * 5);
+            setScore(s => s + 10 + bonusPoints);
+            
             shootLaser(targetAsteroid);
-            setAsteroids(prev => prev.filter(a => a.id !== targetAsteroid.id));
+            let destroyedIds = [targetAsteroid.id];
+            
+            // Double Laser Power-up
+            if (powerUps.doubleLaser) {
+                const otherAsteroid = asteroids.find(a => a.id !== targetAsteroid.id);
+                if (otherAsteroid) {
+                    shootLaser(otherAsteroid);
+                    destroyedIds.push(otherAsteroid.id);
+                }
+            }
+            
+            setAsteroids(prev => prev.filter(a => !destroyedIds.includes(a.id)));
+            setAsteroidsDestroyedThisWave(c => c + destroyedIds.length);
             setUserInput('');
+
+            // Check for power-up activation
+            if (newStreak === STREAK_FOR_SHIELD) {
+                setPowerUps(p => ({ ...p, shield: true }));
+                showPowerUpMessage("SKÖLD AKTIVERAD!");
+            } else if (newStreak === STREAK_FOR_TIME_FREEZE) {
+                setPowerUps(p => ({ ...p, timeFreeze: true }));
+                showPowerUpMessage("TIDEN FRYSER!");
+                setTimeout(() => setPowerUps(p => ({ ...p, timeFreeze: false })), TIME_FREEZE_DURATION);
+            } else if (newStreak === STREAK_FOR_DOUBLE_LASER) {
+                setPowerUps(p => ({ ...p, doubleLaser: true }));
+                showPowerUpMessage("DUBBEL-LASER!");
+                setTimeout(() => setPowerUps(p => ({ ...p, doubleLaser: false })), DOUBLE_LASER_DURATION);
+            }
+
         } else {
+            // Incorrect answer logic
+            setStreak(0);
             setIsShaking(true);
             setShowWrongFeedback(true);
             if (wrongAnswerSoundRef.current) {
@@ -301,16 +343,15 @@ export default function App() {
         <main className={`relative w-screen h-screen overflow-hidden bg-gradient-to-b from-gray-900 via-indigo-900 to-blue-900 transition-all duration-500 ${isHit ? 'flash-anim' : ''}`}>
              <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%228%22%20height=%228%22%20viewBox=%220%200%208%208%22%3E%3Cpath%20d=%22M0%200L4%204L0%208Z%22%20fill=%22%23ffffff10%22/%3E%3C/svg%3E')]"></div>
              
-             {/* Audio elements */}
              <audio ref={wrongAnswerSoundRef} preload="auto">
-                <source src="data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAiBUAAIgVAAABAAgAZGF0YcQAAAAAAMD/gP6A/YD8APuA/AD8gP2A/oD/gMCAwIDBAIGAwgDDgMKAw4DDAK+ApwCiAKoAqgCoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACo-love" type="audio/wav" />
+                <source src="data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAiBUAAIgVAAABAAgAZGF0YcQAAAAAAMD/gP6A/YD8APuA/AD8gP2A/oD/gMCAwIDBAIGAwgDDgMKAw4DDAK+ApwCiAKoAqgCoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACo-love" type="audio/wav" />
              </audio>
-             
+
+            {powerUps.timeFreeze && <div className="time-freeze-overlay"></div>}
+            
             {showWrongFeedback && (
                 <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-                    <span className="text-8xl font-bold text-red-500 feedback-anim">
-                        FEL!
-                    </span>
+                    <span className="text-8xl font-bold text-red-500 feedback-anim">FEL!</span>
                 </div>
             )}
 
@@ -320,11 +361,11 @@ export default function App() {
             {gameState === 'playing' && (
                 <>
                     {/* Game UI */}
-                    <div className="absolute top-0 left-0 right-0 p-4 z-20 flex items-center gap-4 bg-black bg-opacity-20 backdrop-blur-sm">
-                        <p className="text-white text-2xl font-bold w-48">Poäng: {score}</p>
-                        <div className="flex-grow">
-                            <HealthBar health={health} />
-                        </div>
+                    <div className="absolute top-0 left-0 right-0 p-4 z-20 flex items-center justify-between gap-4 bg-black bg-opacity-20 backdrop-blur-sm text-white font-bold">
+                        <p className="text-xl w-36">Poäng: {score}</p>
+                        <p className="text-xl w-32">Våg: {wave}</p>
+                        <div className="flex-grow"><HealthBar health={health} /></div>
+                        <p className="text-xl w-32 text-right">Streak: <span className="text-yellow-300">{streak}</span></p>
                     </div>
                     
                     {/* Asteroids */}
@@ -343,27 +384,26 @@ export default function App() {
                                 minHeight: '64px',
                             }}
                         >
-                            <span style={{ transform: `rotate(-${asteroid.rotation}deg)` }}>
-                                {asteroid.problem.question}
-                            </span>
+                            <span style={{ transform: `rotate(-${asteroid.rotation}deg)` }}>{asteroid.problem.question}</span>
                         </div>
                     ))}
                     
-                     {/* Lasers */}
-                    {lasers.map(laser => (
-                         <div key={laser.id} className="laser" style={{ left: `calc(${laser.x}vw - 2px)`, bottom: '15vh' }}></div>
-                    ))}
+                    {lasers.map(laser => ( <div key={laser.id} className="laser" style={{ left: `calc(${laser.x}vw - 2px)`, bottom: '15vh' }}></div> ))}
 
                     {/* Planet */}
-                    <div className="absolute bottom-[-20vh] left-1/2 -translate-x-1/2 w-[50vh] h-[50vh] bg-gradient-to-br from-green-400 via-teal-500 to-blue-600 rounded-full shadow-[0_0_80px_rgba(70,180,255,0.5)]">
+                    <div className={`absolute bottom-[-20vh] left-1/2 -translate-x-1/2 w-[50vh] h-[50vh] bg-gradient-to-br from-green-400 via-teal-500 to-blue-600 rounded-full shadow-[0_0_80px_rgba(70,180,255,0.5)] ${powerUps.shield ? 'shield-active' : ''}`}>
                         <div className="absolute inset-0 rounded-full opacity-30 bg-[url('data:image/svg+xml,%3Csvg%20width=%2260%22%20height=%2260%22%20viewBox=%220%200%2060%2060%22%20xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cg%20fill=%22none%22%20fill-rule=%22evenodd%22%3E%3Cg%20fill=%22%23ffffff%22%20fill-opacity=%220.4%22%3E%3Cpath%20d=%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]"></div>
                     </div>
                     
                     {/* Spaceship and Input */}
                     <div className="absolute bottom-0 left-0 right-0 z-10 p-4 flex flex-col items-center">
+                        <div className="h-16 text-center">
+                            {powerUpMessage && <p className="text-2xl font-bold text-yellow-300 drop-shadow-lg powerup-anim">{powerUpMessage}</p>}
+                            {streak > 2 && !powerUpMessage && <p className="text-2xl font-bold text-orange-400">COMBO x{streak}!</p>}
+                        </div>
                         <svg viewBox="0 0 100 100" className="w-24 h-24 mb-[-10px]">
                             <path d="M50 10 L70 50 L60 50 L60 80 L40 80 L40 50 L30 50 Z" fill="#c0c0c0" stroke="#a0a0a0" strokeWidth="3"/>
-                            <path d="M50 20 L55 45 L45 45 Z" fill="#00ffff"/>
+                            <path d="M50 20 L55 45 L45 45 Z" fill={powerUps.doubleLaser ? "#ff4500" : "#00ffff"}/>
                             <path d="M35 80 L20 95 L25 80 Z" fill="orange" />
                             <path d="M65 80 L80 95 L75 80 Z" fill="orange" />
                         </svg>
