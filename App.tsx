@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState, AsteroidType, LaserEffect } from './types';
+import { GameState, AsteroidType, LaserEffect, MathType } from './types';
 
 // --- CONSTANTS ---
 const PLANET_DAMAGE = 20;
@@ -11,14 +11,44 @@ const MAX_ASTEROIDS = 8;
 const LOCAL_STORAGE_KEY = 'asteroRakningHighScore';
 
 // --- HELPER FUNCTIONS ---
-const generateProblem = (): AsteroidType['problem'] => {
-  const a = Math.floor(Math.random() * 9) + 2; // 2-10
-  const b = Math.floor(Math.random() * 9) + 2; // 2-10
-  return {
-    question: `${a} × ${b}`,
-    answer: a * b,
-  };
+const generateProblem = (type: MathType): AsteroidType['problem'] => {
+  switch (type) {
+    case 'multiplication': {
+      const a = Math.floor(Math.random() * 9) + 2; // 2-10
+      const b = Math.floor(Math.random() * 9) + 2; // 2-10
+      return {
+        question: `${a} × ${b}`,
+        answer: a * b,
+      };
+    }
+    case 'addition': {
+      const a = Math.floor(Math.random() * 81) + 10; // 10-90
+      const b = Math.floor(Math.random() * 81) + 10; // 10-90
+      return {
+        question: `${a} + ${b}`,
+        answer: a + b,
+      };
+    }
+    case 'subtraction': {
+      const a = Math.floor(Math.random() * 81) + 20; // 20-100
+      const b = Math.floor(Math.random() * (a - 10)) + 10; // 10 up to a-10
+      return {
+        question: `${a} − ${b}`,
+        answer: a - b,
+      };
+    }
+    case 'division': {
+      const answer = Math.floor(Math.random() * 9) + 2; // 2-10
+      const b = Math.floor(Math.random() * 9) + 2; // 2-10
+      const a = answer * b;
+      return {
+        question: `${a} ÷ ${b}`,
+        answer: answer,
+      };
+    }
+  }
 };
+
 
 const getHighScoreFromStorage = (): number => {
     try {
@@ -56,39 +86,66 @@ const HealthBar: React.FC<HealthBarProps> = ({ health }) => {
     );
 };
 
-interface ScreenProps {
-    onAction: () => void;
-    score?: number;
+interface StartScreenProps {
+    onStartGame: (type: MathType) => void;
     highScore?: number;
 }
 
-const StartScreen: React.FC<ScreenProps> = ({ onAction, highScore }) => (
-    <div className="text-center text-white flex flex-col items-center justify-center h-full bg-black bg-opacity-50 p-8 rounded-xl">
-        <h1 className="text-6xl font-bold text-cyan-300 drop-shadow-[0_0_10px_rgba(0,255,255,0.7)] mb-4" style={{ fontFamily: 'monospace' }}>
+const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, highScore }) => (
+    <div className="text-center text-white flex flex-col items-center justify-center h-full bg-black bg-opacity-50 p-8 rounded-xl max-w-lg mx-auto">
+        <h1 className="text-5xl md:text-6xl font-bold text-cyan-300 drop-shadow-[0_0_10px_rgba(0,255,255,0.7)] mb-4" style={{ fontFamily: 'monospace' }}>
             Julias Astero-Räkning
         </h1>
-        <p className="text-xl mb-6 text-gray-300">Hej Julia! Rädda planeten genom att lösa gångertabellen!</p>
-        <p className="text-lg mb-8 text-yellow-300">Högsta poäng: {highScore}</p>
-        <button
-            onClick={onAction}
-            className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-4 px-8 rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0"
-        >
-            Starta Spel
-        </button>
+        <p className="text-lg md:text-xl mb-6 text-gray-300">Hej Julia! Rädda planeten genom att lösa tal!</p>
+        <p className="text-lg mb-6 text-yellow-300">Högsta poäng: {highScore}</p>
+        <div className="w-full mt-4">
+          <p className="text-xl mb-4 text-gray-200">Välj ett räknesätt för att börja:</p>
+          <div className="grid grid-cols-2 gap-4">
+              <button
+                  onClick={() => onStartGame('multiplication')}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0"
+              >
+                  Gånger (×)
+              </button>
+              <button
+                  onClick={() => onStartGame('addition')}
+                  className="bg-green-500 hover:bg-green-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-green-700 active:border-b-0"
+              >
+                  Plus (+)
+              </button>
+              <button
+                  onClick={() => onStartGame('subtraction')}
+                  className="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-yellow-700 active:border-b-0"
+              >
+                  Minus (−)
+              </button>
+              <button
+                  onClick={() => onStartGame('division')}
+                  className="bg-purple-500 hover:bg-purple-400 text-gray-900 font-bold py-3 px-6 rounded-lg text-xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-purple-700 active:border-b-0"
+              >
+                  Delat (÷)
+              </button>
+          </div>
+        </div>
     </div>
 );
 
-const GameOverScreen: React.FC<ScreenProps> = ({ onAction, score, highScore }) => (
+interface GameOverScreenProps {
+    onGoToStart: () => void;
+    score?: number;
+    highScore?: number;
+}
+const GameOverScreen: React.FC<GameOverScreenProps> = ({ onGoToStart, score, highScore }) => (
     <div className="text-center text-white flex flex-col items-center justify-center h-full bg-black bg-opacity-50 p-8 rounded-xl">
         <h2 className="text-5xl font-bold text-red-500 mb-4">Spelet Över</h2>
         <p className="text-xl mb-4">Bra kämpat, Julia!</p>
         <p className="text-2xl mb-4">Din poäng: <span className="font-bold text-white">{score}</span></p>
         <p className="text-2xl mb-8">Högsta poäng: <span className="font-bold text-yellow-300">{highScore}</span></p>
         <button
-            onClick={onAction}
-            className="bg-green-500 hover:bg-green-400 text-gray-900 font-bold py-4 px-8 rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-green-700 active:border-b-0"
+            onClick={onGoToStart}
+            className="bg-cyan-500 hover:bg-cyan-400 text-gray-900 font-bold py-4 px-8 rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-all duration-300 border-b-4 border-cyan-700 active:border-b-0"
         >
-            Spela Igen
+            Tillbaka till Start
         </button>
     </div>
 );
@@ -98,6 +155,7 @@ const GameOverScreen: React.FC<ScreenProps> = ({ onAction, score, highScore }) =
 
 export default function App() {
     const [gameState, setGameState] = useState<GameState>('start');
+    const [mathType, setMathType] = useState<MathType | null>(null);
     const [score, setScore] = useState(0);
     const [highScore, setHighScore] = useState(0);
     const [health, setHealth] = useState(100);
@@ -114,13 +172,19 @@ export default function App() {
       setHighScore(getHighScoreFromStorage());
     }, []);
 
-    const startGame = useCallback(() => {
+    const startGame = useCallback((type: MathType) => {
+        setMathType(type);
         setScore(0);
         setHealth(100);
         setAsteroids([]);
         setUserInput('');
         setGameState('playing');
         setTimeout(() => inputRef.current?.focus(), 100);
+    }, []);
+
+    const goToStart = useCallback(() => {
+        setGameState('start');
+        setMathType(null);
     }, []);
 
     const handleGameOver = useCallback(() => {
@@ -133,19 +197,19 @@ export default function App() {
     }, [score, highScore]);
 
     useEffect(() => {
-        if (gameState !== 'playing') return;
+        if (gameState !== 'playing' || !mathType) return;
 
         const spawnAsteroid = () => {
           setAsteroids(prev => {
             if (prev.length >= MAX_ASTEROIDS) return prev;
             const newAsteroid: AsteroidType = {
               id: Date.now(),
-              problem: generateProblem(),
+              problem: generateProblem(mathType),
               position: {
                 top: -10,
                 left: Math.random() * 80 + 10,
               },
-              size: Math.random() * 4 + 6, // size in vw
+              size: Math.random() * 4 + 8, // size in vw
               rotation: Math.random() * 360,
             };
             return [...prev, newAsteroid];
@@ -181,7 +245,7 @@ export default function App() {
             clearInterval(spawnInterval);
             clearInterval(gameLoop);
         };
-    }, [gameState]);
+    }, [gameState, mathType]);
 
     useEffect(() => {
         if (health <= 0 && gameState === 'playing') {
@@ -239,7 +303,7 @@ export default function App() {
              
              {/* Audio elements */}
              <audio ref={wrongAnswerSoundRef} preload="auto">
-                <source src="data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAiBUAAIgVAAABAAgAZGF0YcQAAAAAAMD/gP6A/YD8APuA/AD8gP2A/oD/gMCAwIDBAIGAwgDDgMKAw4DDAK+ApwCiAKoAqgCoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACo-love" type="audio/wav" />
+                <source src="data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEAiBUAAIgVAAABAAgAZGF0YcQAAAAAAMD/gP6A/YD8APuA/AD8gP2A/oD/gMCAwIDBAIGAwgDDgMKAw4DDAK+ApwCiAKoAqgCoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACoAKgAqACo-love" type="audio/wav" />
              </audio>
              
             {showWrongFeedback && (
@@ -250,8 +314,8 @@ export default function App() {
                 </div>
             )}
 
-            {gameState === 'start' && <StartScreen onAction={startGame} highScore={highScore} />}
-            {gameState === 'gameOver' && <GameOverScreen onAction={startGame} score={score} highScore={highScore} />}
+            {gameState === 'start' && <StartScreen onStartGame={startGame} highScore={highScore} />}
+            {gameState === 'gameOver' && <GameOverScreen onGoToStart={goToStart} score={score} highScore={highScore} />}
 
             {gameState === 'playing' && (
                 <>
@@ -275,6 +339,8 @@ export default function App() {
                                 height: `${asteroid.size * 0.8}vw`,
                                 transform: `translateX(-50%) rotate(${asteroid.rotation}deg)`,
                                 borderRadius: '30% 70% 70% 30% / 30% 30% 70% 70%',
+                                minWidth: '80px',
+                                minHeight: '64px',
                             }}
                         >
                             <span style={{ transform: `rotate(-${asteroid.rotation}deg)` }}>

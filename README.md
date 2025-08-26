@@ -1,21 +1,23 @@
-# Julias Astero-Räkning: Gångertabellen i Rymden
+# Julias Astero-Räkning: Matte i Rymden
 
-Detta är ett roligt och engagerande webbläsarspel skapat för att hjälpa barn, särskilt Julia, att öva på sina gångertabeller på ett interaktivt sätt. Spelaren måste försvara sin planet från en anstormning av asteroider genom att snabbt lösa de multiplikationsproblem som visas på dem.
+Detta är ett roligt och engagerande webbläsarspel skapat för att hjälpa barn, särskilt Julia, att öva på sina grundläggande mattekunskaper på ett interaktivt sätt. Spelaren måste försvara sin planet från en anstormning av asteroider genom att snabbt lösa de matteproblem som visas på dem.
 
 ## Gameplay
 
 -   **Mål:** Skydda din planet från att bli träffad av asteroider.
 -   **Hur man spelar:**
-    1.  Asteroider med multiplikationsproblem (från 2:ans till 10:ans tabell) faller ner från toppen av skärmen.
-    2.  Skriv in det korrekta svaret i inmatningsrutan längst ner på skärmen och tryck på Enter.
-    3.  Om svaret är korrekt avfyras en laser som förstör motsvarande asteroid och du får 10 poäng.
-    4.  Om en asteroid når din planet förlorar planeten 20% av sin hälsa.
-    5.  Om du skriver ett felaktigt svar skakar inmatningsrutan.
+    1.  Välj ett räknesätt på startskärmen: Gånger, Plus, Minus, eller Delat.
+    2.  Asteroider med matteproblem faller ner från toppen av skärmen.
+    3.  Skriv in det korrekta svaret i inmatningsrutan längst ner på skärmen och tryck på Enter.
+    4.  Om svaret är korrekt avfyras en laser som förstör motsvarande asteroid och du får 10 poäng.
+    5.  Om en asteroid når din planet förlorar planeten 20% av sin hälsa.
+    6.  Om du skriver ett felaktigt svar skakar inmatningsrutan.
 -   **Slutet på spelet:** Spelet är över när planetens hälsa når noll. Dina poäng sparas, och om du har slagit ditt tidigare rekord uppdateras din högsta poäng.
 
 ## Funktioner
 
--   **Dynamisk Spelmekanik:** Asteroider genereras kontinuerligt med slumpmässiga multiplikationsproblem.
+-   **Flera Räknesätt:** Välj mellan multiplikation, addition, subtraktion och division för att anpassa övningen.
+-   **Dynamisk Spelmekanik:** Asteroider genereras kontinuerligt med slumpmässiga problem baserat på valt räknesätt.
 -   **Poäng och Högsta Poäng:** Spårar aktuell poäng och sparar den högsta poängen lokalt i webbläsaren med `localStorage`.
 -   **Visuell Feedback:**
     -   Smidiga laseranimationer när en asteroid förstörs.

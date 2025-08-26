@@ -1,5 +1,6 @@
 
 export type GameState = 'start' | 'playing' | 'gameOver';
+export type MathType = 'multiplication' | 'addition' | 'subtraction' | 'division';
 
 export interface AsteroidType {
   id: number;
