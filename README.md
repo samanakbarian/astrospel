@@ -69,3 +69,7 @@ Eftersom detta projekt inte använder en bygg-pipeline (som Webpack eller Vite) 
 3.  **Öppna i webbläsaren:** Öppna den URL som din lokala server tillhandahåller (oftast `http://localhost:8000` eller liknande).
 
 Spelet bör nu laddas och vara redo att spelas!
+
+## Bonus: AI-catwalken
+
+`public/ai-catwalk.html` är en fristående 3D-animation (Three.js) där AI-modellerna som släppts sedan 2024 går catwalk en i taget, var och en med sin egen gag. Starta `npm run dev` och öppna `/ai-catwalk.html`, eller öppna filen direkt i webbläsaren. Piltangenterna byter modell och mellanslag pausar.

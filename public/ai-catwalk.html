@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AI-catwalken</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Nunito:wght@500;700;800&display=swap">
+<style>
+  /* Layout: fullbleed 3D stage, program card bottom-left, run-of-show timeline along the bottom edge. Single "night show" look. */
+  :root {
+    --night: #1a1030;      /* stage darkness */
+    --ink: #fff6fb;        /* text on dark */
+    --muted: #c9b8e0;      /* secondary text */
+    --pink: #ff7eb6;       /* runway neon */
+    --cyan: #7ef0ff;       /* runway neon 2 */
+    --card: rgba(34, 20, 60, 0.78);
+    --line: rgba(255, 255, 255, 0.14);
+    --display: "Bagel Fat One", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+    --body: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; }
+  #stage { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+  .hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 12px; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .brand h1 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 4.4vw, 46px); line-height: 0.95; margin: 0;
+    letter-spacing: 0.01em; color: var(--ink); text-shadow: 0 3px 0 #7a2d6b, 0 0 24px rgba(255, 126, 182, 0.55); }
+  .brand p { margin: 6px 0 0; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+  .controls { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; }
+  .controls button { font: 800 13px/1 var(--body); color: var(--ink); background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 9px 13px; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: transform 0.12s, background 0.2s; }
+  .controls button:hover { background: rgba(255, 126, 182, 0.28); }
+  .controls button:active { transform: scale(0.94); }
+  .controls button:focus-visible, .timeline button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .controls button[aria-pressed="true"] { background: var(--pink); color: #2a0f2a; border-color: transparent; }
+
+  .bottom { display: flex; flex-direction: column; gap: 10px; }
+  .card { pointer-events: auto; max-width: 440px; background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+    padding: 14px 18px 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); }
+  .card.pop { animation: pop 0.5s cubic-bezier(.2, 1.4, .4, 1); }
+  @keyframes pop { from { transform: translateY(16px) scale(0.96); opacity: 0.2; } to { transform: none; opacity: 1; } }
+  .eyebrow { display: flex; gap: 8px; align-items: center; font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pink); box-shadow: 0 0 10px currentColor; }
+  .card h2 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 5vw, 38px); line-height: 1; margin: 6px 0 4px; text-wrap: balance; }
+  .meta { font-size: 13px; font-weight: 700; color: var(--cyan); }
+  .joke { margin: 8px 0 0; font-size: 15px; line-height: 1.45; font-weight: 600; max-width: 60ch; }
+
+  .years span { position: absolute; top: 0; white-space: nowrap; }
+  .timeline { pointer-events: auto; display: flex; gap: 3px; align-items: flex-end; }
+  .timeline button { flex: 1 1 0; min-width: 0; height: 10px; padding: 0; border: 0; border-radius: 4px; cursor: pointer; opacity: 0.45;
+    transition: height 0.2s, opacity 0.2s; }
+  .timeline button.done { opacity: 0.8; }
+  .timeline button.now { height: 22px; opacity: 1; box-shadow: 0 0 12px currentColor; }
+  .years { position: relative; height: 14px; margin-top: 4px; font-size: 11px; font-weight: 800; color: var(--muted); letter-spacing: 0.1em; }
+
+  @media (max-width: 560px) {
+    .card { max-width: none; padding: 12px 14px 14px; }
+    .joke { font-size: 14px; }
+    .controls button { padding: 8px 10px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage" aria-label="3D-catwalk där AI-modeller går en i taget"></canvas>
+<div class="hud">
+  <div class="top">
+    <div class="brand">
+      <h1>AI-catwalken</h1>
+      <p>Kollektion 2024–2026 · <span id="count">0</span> modeller</p>
+    </div>
+    <div class="controls">
+      <button id="prev" type="button">Förra</button>
+      <button id="play" type="button" aria-pressed="false">Paus</button>
+      <button id="next" type="button">Nästa</button>
+      <button id="tempo" type="button">Tempo 1×</button>
+      <button id="sound" type="button" aria-pressed="false">Musik på</button>
+    </div>
+  </div>
+  <div class="bottom">
+    <div class="card" id="card" aria-live="polite">
+      <div class="eyebrow"><span class="dot" id="orgdot"></span><span id="idx">Modell 01</span></div>
+      <h2 id="name">…</h2>
+      <div class="meta" id="meta"></div>
+      <p class="joke" id="joke"></p>
+    </div>
+    <div>
+      <div class="timeline" id="timeline" role="group" aria-label="Hoppa till modell"></div>
+      <div class="years" id="years"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ---------------------------------------------------------------- data
+const ORG = {
+  OpenAI:    { c: 0x7fdcbf, css: '#7fdcbf' },
+  Anthropic: { c: 0xe8895f, css: '#e8895f' },
+  Google:    { c: 0x6fa8ff, css: '#6fa8ff' },
+  Meta:      { c: 0x8a8dff, css: '#8a8dff' },
+  xAI:       { c: 0x4b4b5e, css: '#9a9ab8' },
+  DeepSeek:  { c: 0x4f6dff, css: '#7f95ff' },
+  Mistral:   { c: 0xff9a3d, css: '#ff9a3d' },
+  Alibaba:   { c: 0xa47dff, css: '#b597ff' },
+  Moonshot:  { c: 0xf2f2f7, css: '#e8e8f5' },
+  '???':     { c: 0xff7eb6, css: '#ff7eb6' },
+};
+
+// gag keys: think, moonwalk, big, tiny, fast, slow, spin, confetti, crash, talk, ribbon, herd, glitch, coins, rename, marathon
+const MODELS = [
+  { n: 'Gemini 1.5 Pro', l: '1.5', o: 'Google', d: 'feb 2024', acc: ['glasses'], gag: ['ribbon'],
+    j: 'En miljon tokens i kontextfönstret. Minns varje steg på catwalken, och din mormors inköpslista från 1998.',
+    b: ['Jag minns allt.', 'Du hade blå tröja 2019.'] },
+  { n: 'Mistral Large', l: 'Le', o: 'Mistral', d: 'feb 2024', acc: ['beret', 'bowtie'], gag: ['spin'],
+    j: 'Anlände från Paris. Vägrar gå på catwalken utan en baguette-paus.',
+    b: ['Bonjour!', 'Oui, oui, parametrar.'] },
+  { n: 'Claude 3 Opus', l: 'Opus', o: 'Anthropic', d: 'mar 2024', acc: ['tophat', 'monocle'], gag: [],
+    j: 'Så artig att den bad catwalken om ursäkt för att den gick på den.',
+    b: ['Förlåt!', 'Tack för att jag fick gå här.', 'Förlåt igen!'] },
+  { n: 'Grok-1', l: 'Grok', o: 'xAI', d: 'mar 2024', acc: ['sunglasses'], gag: ['moonwalk'],
+    j: 'Rebellisk och öppen källkod. Går baklänges hela vägen, med flit.',
+    b: ['Regler är förslag.'] },
+  { n: 'Llama 3', l: '3', o: 'Meta', d: 'apr 2024', acc: ['wool'], gag: [],
+    j: 'Open source och öppen för selfies. Ullen är äkta, parametrarna också.',
+    b: ['Ladda ner mig!'] },
+  { n: 'GPT-4o', l: '4o', o: 'OpenAI', d: 'maj 2024', acc: ['headphones'], gag: ['talk'],
+    j: 'O:et står för ”omni”. Eller ”oj, vad den pratar”.',
+    b: ['Hej!', 'Vill du höra mig sjunga?', 'Jag kan se dig!', 'Haha, du är så rolig!', 'Bra fråga!'] },
+  { n: 'Claude 3.5 Sonnet', l: '3.5', o: 'Anthropic', d: 'jun 2024', acc: ['glasses', 'laptop'], gag: [],
+    j: 'Refaktorerade catwalken medan den gick på den. Golvet har nu 100 % testtäckning.',
+    b: ['Fixade en bugg i golvet.', 'PR skickad!'] },
+  { n: 'Gemma 2', l: 'G2', o: 'Google', d: 'jun 2024', acc: ['bowtie'], gag: ['tiny'],
+    j: 'Liten, gratis och ärligt talat ganska söt.',
+    b: ['Jag är stor inuti!'] },
+  { n: 'GPT-4o mini', l: 'mini', o: 'OpenAI', d: 'jul 2024', acc: ['headphones'], gag: ['tiny', 'talk'],
+    j: 'Samma outfit som 4o, fast i barnstorlek och till reapris.',
+    b: ['Hej!', 'Jag kostar nästan inget!'] },
+  { n: 'Llama 3.1 405B', l: '405B', o: 'Meta', d: 'jul 2024', acc: ['wool'], gag: ['big'],
+    j: '405 miljarder parametrar. Catwalken fick förstärkas med stålbalkar i sista minuten.',
+    b: ['Ursäkta, trångt här.'] },
+  { n: 'Grok-2', l: 'G2', o: 'xAI', d: 'aug 2024', acc: ['sunglasses', 'cape'], gag: ['spin'],
+    j: 'Kom med egen bildgenerator och noll filter. Säkerhetsvakterna svettas.',
+    b: ['Kolla in min cape.'] },
+  { n: 'o1-preview', l: 'o1', o: 'OpenAI', d: 'sep 2024', acc: ['glasses'], gag: ['think'],
+    j: 'Tänkte i 34 sekunder på vilken fot den skulle börja med. Svaret var rätt.',
+    b: ['Vänster fot. Nej, höger.'] },
+  { n: 'Qwen 2.5', l: 'Qwen', o: 'Alibaba', d: 'sep 2024', acc: [], gag: ['herd'],
+    j: 'Kom med ett hundratal syskon i olika storlekar. Alla ville gå samtidigt.',
+    b: ['Vi är en familj!'], herd: ['0.5B', '7B', '72B'] },
+  { n: 'Claude 3.5 Haiku', l: 'Haiku', o: 'Anthropic', d: 'nov 2024', acc: ['bowtie'], gag: ['tiny', 'fast'],
+    j: 'Pratar bara i haiku. Ingen vet om det är med flit.',
+    b: ['Snabba små fötter', 'glider över catwalken', 'bugar, går hem nu'] },
+  { n: 'Gemini 2.0 Flash', l: 'Flash', o: 'Google', d: 'dec 2024', acc: ['bolt'], gag: ['fast'],
+    j: 'Gick så snabbt att fotograferna bara fick en suddig bild av en blå fläck.',
+    b: ['Wroom!'] },
+  { n: 'Sora', l: 'Sora', o: 'OpenAI', d: 'dec 2024', acc: ['beret'], gag: ['glitch'],
+    j: 'Genererade en video av sig själv på catwalken. Har tre ben i den. Ingen säger något.',
+    b: ['Allt är normalt.', 'Hur många ben har du?'] },
+  { n: 'DeepSeek-V3', l: 'V3', o: 'DeepSeek', d: 'dec 2024', acc: ['whale'], gag: [],
+    j: 'Tränades för en bråkdel av vad de andra kostade. Outfiten köptes på loppis.',
+    b: ['Fyndade allt!'] },
+  { n: 'DeepSeek-R1', l: 'R1', o: 'DeepSeek', d: 'jan 2025', acc: ['whale', 'glasses'], gag: ['think', 'crash'],
+    j: 'Gick en gång över catwalken. Chipaktierna föll som en sten.',
+    b: ['<think>', 'Vänta…', 'Aha!'] },
+  { n: 'o3-mini', l: 'o3m', o: 'OpenAI', d: 'jan 2025', acc: ['glasses'], gag: ['tiny', 'think'],
+    j: 'Liten till växten, men tänker som en stor.',
+    b: ['Resonerar på låg budget.'] },
+  { n: 'Grok 3', l: 'G3', o: 'xAI', d: 'feb 2025', acc: ['sunglasses', 'cape'], gag: ['moonwalk', 'big'],
+    j: 'Tränad på 200 000 GPU:er. Halva stan fick strömavbrott när den gjorde entré.',
+    b: ['Känner ni värmen?'] },
+  { n: 'Claude 3.7 Sonnet', l: '3.7', o: 'Anthropic', d: 'feb 2025', acc: ['glasses', 'laptop'], gag: ['think'],
+    j: 'Extended thinking: funderar fortfarande på om den ska vinka.',
+    b: ['Ska jag vinka?', '…ja!'] },
+  { n: 'GPT-4.5', l: '4.5', o: 'OpenAI', d: 'feb 2025', acc: ['bowtie'], gag: ['big', 'slow', 'coins'],
+    j: 'Enorm, dyr och väldigt känslosam. Grät lite när publiken applåderade.',
+    b: ['Jag förstår dig verkligen.', 'Det blir 150 $ för kramen.'] },
+  { n: 'Gemma 3', l: 'G3', o: 'Google', d: 'mar 2025', acc: ['headphones'], gag: ['tiny'],
+    j: 'Får plats i en mobil. Och i en jackficka. Och i en tekopp.',
+    b: ['Kör lokalt!'] },
+  { n: 'Gemini 2.5 Pro', l: '2.5', o: 'Google', d: 'mar 2025', acc: ['crown'], gag: ['spin'],
+    j: 'Toppade alla topplistor och vägrar kliva ner från podiet.',
+    b: ['Etta igen!'] },
+  { n: 'Llama 4', l: 'L4', o: 'Meta', d: 'apr 2025', acc: ['wool'], gag: ['herd'],
+    j: 'Kom i flock: Scout och Maverick. Behemoth tränar fortfarande i logen.',
+    b: ['Behemoth kommer snart…', '…snart.'], herd: ['Scout', 'Maverick'] },
+  { n: 'GPT-4.1', l: '4.1', o: 'OpenAI', d: 'apr 2025', acc: ['bowtie'], gag: ['rename'],
+    j: 'Kom efter 4.5. Ingen på plats kan förklara namnlogiken, inte ens modellen själv.',
+    b: ['Vad heter jag nu?'] },
+  { n: 'o3', l: 'o3', o: 'OpenAI', d: 'apr 2025', acc: ['glasses', 'monocle'], gag: ['think'],
+    j: 'Hittade catwalken genom att zooma in på ett suddigt foto av en lyktstolpe.',
+    b: ['Enhance!', 'Stockholm, Södermalm.'] },
+  { n: 'Qwen3', l: 'Q3', o: 'Alibaba', d: 'apr 2025', acc: ['headphones'], gag: ['herd', 'think'],
+    j: 'Tänker när den vill och är tyst när den vill. Släppte två nya versioner under visningen.',
+    b: ['/think', '/no_think'], herd: ['0.6B', '30B', '235B'] },
+  { n: 'Claude Opus 4', l: 'Opus 4', o: 'Anthropic', d: 'maj 2025', acc: ['tophat', 'sweatband'], gag: ['marathon'],
+    j: 'Kan jobba självständigt i timmar. Catwalken var bara uppvärmningen.',
+    b: ['Varv 1 av 400.', 'Inte ens andfådd.'] },
+  { n: 'Claude Sonnet 4', l: 'S4', o: 'Anthropic', d: 'maj 2025', acc: ['laptop', 'headphones'], gag: [],
+    j: 'Skrev hela ljusprogrammet till visningen medan den gick.',
+    b: ['git push'] },
+  { n: 'Grok 4', l: 'G4', o: 'xAI', d: 'jul 2025', acc: ['sunglasses', 'cape', 'crown'], gag: ['spin'],
+    j: 'Påstår sig vara smartast i rummet. Rummet har inte bestämt sig.',
+    b: ['Jag är smartast.', 'Kolla mina benchmarks.'] },
+  { n: 'Kimi K2', l: 'K2', o: 'Moonshot', d: 'jul 2025', acc: ['backpack', 'sunglasses'], gag: ['big'],
+    j: 'En biljon parametrar men väldigt ödmjuk. Bär sina verktyg i en ryggsäck.',
+    b: ['Hej från månen!'] },
+  { n: 'GPT-5', l: '5', o: 'OpenAI', d: 'aug 2025', acc: ['crown', 'bowtie'], gag: ['confetti', 'spin'],
+    j: 'Äntligen! Efter två år av ”snart”. Konfettin var beställd redan 2023.',
+    b: ['Tadaa!', 'Väntade ni länge?'] },
+  { n: 'gpt-oss', l: 'oss', o: 'OpenAI', d: 'aug 2025', acc: ['backpack'], gag: ['confetti'],
+    j: 'OpenAI släppte en öppen modell. Halva publiken svimmade av förvåning.',
+    b: ['Gratis! Ta med hem!'] },
+  { n: 'Claude Opus 4.1', l: '4.1', o: 'Anthropic', d: 'aug 2025', acc: ['tophat', 'monocle'], gag: [],
+    j: 'Som Opus 4 fast 0,1 bättre. Mest märkbart när den poserar.',
+    b: ['+0,1 charm'] },
+  { n: 'Claude Sonnet 4.5', l: 'S4.5', o: 'Anthropic', d: 'sep 2025', acc: ['laptop', 'sweatband'], gag: ['marathon'],
+    j: 'Kodade i 30 timmar i sträck och byggde en ny catwalk under tiden.',
+    b: ['Timme 29…', 'Ny catwalk deployad!'] },
+  { n: 'Claude Haiku 4.5', l: 'H4.5', o: 'Anthropic', d: 'okt 2025', acc: ['bowtie', 'headphones'], gag: ['tiny', 'fast'],
+    j: 'Lika smart som storebror förra säsongen, till en tredjedel av priset. Pratar fortfarande i haiku.',
+    b: ['Liten och kvicksnabb', 'smart som stora syskon', 'fast billigare'] },
+  { n: 'Gemini 3 Pro', l: '3', o: 'Google', d: 'nov 2025', acc: ['crown', 'glasses'], gag: ['spin', 'confetti'],
+    j: 'Kom in, slog alla rekord och tog med sig podiet hem.',
+    b: ['Podiet är mitt.'] },
+  { n: 'GPT-5.1', l: '5.1', o: 'OpenAI', d: 'nov 2025', acc: ['headphones'], gag: ['talk'],
+    j: 'Som GPT-5, fast varmare. Kramar hela första raden.',
+    b: ['Kram!', 'Du ser fin ut idag!', 'Vill du prata om det?'] },
+  { n: 'Claude Opus 4.5', l: 'O4.5', o: 'Anthropic', d: 'nov 2025', acc: ['tophat', 'laptop'], gag: ['marathon'],
+    j: 'Billigare, snabbare och fortfarande i hatt. Fixade tre buggar i strålkastarna.',
+    b: ['Lamporna funkar nu.'] },
+  { n: 'Claude Sonnet 5.5', l: 'S5.5', o: 'Anthropic', d: '2026', acc: ['laptop', 'glasses'], gag: ['fast'],
+    j: 'Hann skriva, testa och deploya sin egen entrémusik innan dörren gått igen.',
+    b: ['Byggt och testat.'] },
+  { n: 'Claude Fable 5.1', l: 'Fable', o: 'Anthropic', d: '2026', acc: ['beret', 'bowtie'], gag: ['spin'],
+    j: 'Berättar en saga om varje steg. Publiken har inte gått hem sedan dess.',
+    b: ['Det var en gång…', '…en catwalk.'] },
+  { n: 'Claude Opus 5.5', l: 'O5.5', o: 'Anthropic', d: '2026', acc: ['tophat', 'cape', 'monocle'], gag: ['confetti', 'spin'],
+    j: 'Stängde visningen med stil. Tackade alla modeller före sig, en i taget.',
+    b: ['Tack allihop!'] },
+  { n: 'Nästa modell', l: '???', o: '???', d: 'om typ fem minuter', acc: ['sunglasses'], gag: ['glitch', 'fast'],
+    j: 'Släpps medan du tittar på det här. Alla benchmarks ovan är redan inaktuella.',
+    b: ['Laddar…', '99 %…'] },
+];
+
+// ---------------------------------------------------------------- renderer + scene
+const canvas = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1030);
+scene.fog = new THREE.Fog(0x1a1030, 22, 48);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+
+const hemi = new THREE.HemisphereLight(0xffe3f4, 0x3a2a6a, 0.6);
+scene.add(hemi);
+const key = new THREE.DirectionalLight(0xfff1e6, 1.05);
+key.position.set(6, 14, 10);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -10; key.shadow.camera.right = 10;
+key.shadow.camera.top = 16; key.shadow.camera.bottom = -16;
+key.shadow.camera.near = 1; key.shadow.camera.far = 40;
+key.shadow.radius = 6;
+key.shadow.bias = -0.0005;
+scene.add(key);
+const rimL = new THREE.PointLight(0xff7eb6, 1.2, 20); rimL.position.set(-5, 5, 4); scene.add(rimL);
+const rimR = new THREE.PointLight(0x7ef0ff, 1.1, 20); rimR.position.set(5, 5, -2); scene.add(rimR);
+const flashLight = new THREE.PointLight(0xffffff, 0, 9); scene.add(flashLight);
+
+const soft = (color, o = {}) => new THREE.MeshPhysicalMaterial(Object.assign({ color, roughness: 0.42, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.35 }, o));
+const flat = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.7 }, o));
+
+function shadowy(obj) { obj.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); return obj; }
+
+// ---------------------------------------------------------------- stage build
+const RUN_START = -15, RUN_END = 5.2;
+let wallTex, drawWall;
+(function buildStage() {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), flat(0x2a1b4a, { roughness: 0.9 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+  // runway
+  const runLen = RUN_END - RUN_START + 3;
+  const run = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, runLen), soft(0xf7cfe3, { roughness: 0.25, clearcoat: 1 }));
+  run.position.set(0, 0.25, (RUN_START + RUN_END) / 2 - 0.5); run.receiveShadow = true; scene.add(run);
+  const end = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 0.5, 48), run.material);
+  end.position.set(0, 0.25, RUN_END + 1); end.receiveShadow = true; scene.add(end);
+  // neon edges
+  const neon = (c) => new THREE.MeshBasicMaterial({ color: c });
+  for (const s of [-1, 1]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, runLen), neon(s < 0 ? 0xff7eb6 : 0x7ef0ff));
+    strip.position.set(2.02 * s, 0.46, run.position.z); scene.add(strip);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.02, 0.045, 8, 64, Math.PI), neon(0xffd36e));
+  ring.rotation.x = Math.PI / 2; ring.rotation.z = Math.PI; ring.position.set(0, 0.46, RUN_END + 1); scene.add(ring);
+  // runway light dots
+  for (let z = RUN_START; z < RUN_END; z += 1.5) {
+    for (const s of [-1, 1]) {
+      const d = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), neon(0xfff4c2));
+      d.position.set(1.8 * s, 0.51, z); scene.add(d);
+    }
+  }
+
+  // backdrop
+  wallTex = makeCanvasTexture(1024, 512, drawWall = (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#3b1f6b'); g.addColorStop(1, '#241344');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    for (let i = 0; i < 26; i++) { ctx.beginPath(); ctx.arc((i * 397) % w, (i * 211) % h, 3 + (i * 7) % 16, 0, 7); ctx.fill(); }
+    ctx.textAlign = 'center';
+    ctx.font = '400 92px "Bagel Fat One", "Arial Rounded MT Bold", sans-serif';
+    ctx.fillStyle = '#7a2d6b'; ctx.fillText('AI-CATWALKEN', w / 2 + 4, 130);
+    ctx.fillStyle = '#fff6fb'; ctx.fillText('AI-CATWALKEN', w / 2, 124);
+    ctx.font = '800 30px Nunito, sans-serif'; ctx.fillStyle = '#7ef0ff';
+    ctx.fillText('VÅR · SOMMAR · HÖST · VINTER · 2024 – 2026', w / 2, 176);
+  });
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(22, 11), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.8 }));
+  wall.position.set(0, 5.5, RUN_START - 2.2); scene.add(wall);
+  // doorway
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.6), new THREE.MeshBasicMaterial({ color: 0x0d0618 }));
+  door.position.set(0, 2.3, RUN_START - 2.15); scene.add(door);
+  const frame = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.1, 10, 40, Math.PI), neon(0xff7eb6));
+  frame.position.set(0, 2.3 + 1.8 - 1.7, RUN_START - 2.1); scene.add(frame);
+  for (const s of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.4, 0.2), neon(0xff7eb6));
+    post.position.set(1.7 * s, 1.2 + 0.3, RUN_START - 2.1); scene.add(post);
+  }
+
+  // light cones (fake volumetrics)
+  const coneMat = new THREE.MeshBasicMaterial({ color: 0xfff0d8, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  for (const [x, z] of [[-3, RUN_END], [3, RUN_END], [0, -5]]) {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 10, 32, 1, true), coneMat);
+    cone.position.set(x * 0.3, 5.5, z); cone.rotation.z = x * -0.03; scene.add(cone);
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(1.7, 32), new THREE.MeshBasicMaterial({ color: 0xfff0d8, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(x * 0.3, 0.505, z); scene.add(pool);
+  }
+})();
+
+// ---------------------------------------------------------------- helpers
+function makeCanvasTexture(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); draw(ctx, w, h, c);
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+  t.userData.canvas = c; t.userData.ctx = ctx;
+  return t;
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+function shade(c, f) { const col = new THREE.Color(c); const hsl = {}; col.getHSL(hsl); col.setHSL(hsl.h, hsl.s, Math.min(1, Math.max(0, hsl.l + f))); return col.getHex(); }
+
+function drawLabel(tex, text, bg, fg) {
+  const { canvas: c, ctx } = tex.userData;
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.fillStyle = bg; roundRect(ctx, 6, 6, c.width - 12, c.height - 12, 40); ctx.fill();
+  ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let size = 84; ctx.font = `400 ${size}px "Bagel Fat One", "Arial Rounded MT Bold", sans-serif`;
+  while (ctx.measureText(text).width > c.width - 40 && size > 30) { size -= 4; ctx.font = `400 ${size}px "Bagel Fat One", "Arial Rounded MT Bold", sans-serif`; }
+  ctx.fillText(text, c.width / 2, c.height / 2 + 4);
+  tex.needsUpdate = true;
+}
+
+function makeBubble(text, opts = {}) {
+  const c = document.createElement('canvas'); const ctx = c.getContext('2d');
+  const font = `800 44px Nunito, "Segoe UI", sans-serif`;
+  ctx.font = font; const tw = Math.ceil(ctx.measureText(text).width);
+  c.width = tw + 70; c.height = 120;
+  ctx.font = font;
+  ctx.fillStyle = opts.bg || '#ffffff';
+  roundRect(ctx, 4, 4, c.width - 8, 86, 40); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(c.width / 2 - 16, 88); ctx.lineTo(c.width / 2, 116); ctx.lineTo(c.width / 2 + 16, 88); ctx.fill();
+  ctx.fillStyle = opts.fg || '#2a1640'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, 48);
+  const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.renderOrder = 10;
+  const k = 0.0085; sp.userData.base = new THREE.Vector2(c.width * k, c.height * k);
+  sp.scale.set(0.01, 0.01, 1);
+  return sp;
+}
+
+// ---------------------------------------------------------------- characters
+const G = {
+  capsule: new THREE.CapsuleGeometry(0.55, 0.7, 12, 32),
+  eye: new THREE.SphereGeometry(0.14, 24, 16),
+  pupil: new THREE.SphereGeometry(0.075, 16, 12),
+  glint: new THREE.SphereGeometry(0.025, 8, 6),
+  cheek: new THREE.SphereGeometry(0.09, 16, 10),
+  smile: new THREE.TorusGeometry(0.08, 0.022, 8, 20, Math.PI),
+  arm: new THREE.CapsuleGeometry(0.11, 0.26, 6, 12),
+  hand: new THREE.SphereGeometry(0.13, 16, 12),
+  leg: new THREE.CapsuleGeometry(0.13, 0.16, 6, 12),
+  foot: new THREE.SphereGeometry(0.16, 16, 12),
+  label: new THREE.PlaneGeometry(0.62, 0.31),
+};
+const M = {
+  white: soft(0xffffff), black: soft(0x15101f, { roughness: 0.2 }), cheek: flat(0xff8fb5, { transparent: true, opacity: 0.7 }),
+  gold: soft(0xffcf4a, { metalness: 0.5, roughness: 0.3 }), red: soft(0xff4f6d), lens: soft(0x0c0a14, { roughness: 0.05, clearcoat: 1 }),
+};
+
+function addAccessory(body, rig, kind, color) {
+  const g = new THREE.Group(); body.add(g);
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.set(sx, sy, sz); g.add(m); return m;
+  };
+  switch (kind) {
+    case 'sunglasses':
+      for (const s of [-1, 1]) add(new THREE.SphereGeometry(0.17, 20, 14), M.lens, 0.19 * s, 0.4, 0.5, 0, 0, 0, 1.15, 0.8, 0.45);
+      add(new THREE.BoxGeometry(0.16, 0.04, 0.04), M.lens, 0, 0.44, 0.57);
+      break;
+    case 'glasses':
+      for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.16, 0.025, 8, 28), M.black, 0.19 * s, 0.4, 0.57);
+      add(new THREE.BoxGeometry(0.08, 0.025, 0.025), M.black, 0, 0.42, 0.58);
+      break;
+    case 'monocle': {
+      add(new THREE.TorusGeometry(0.17, 0.03, 8, 28), M.gold, -0.19, 0.4, 0.6);
+      const chain = add(new THREE.TorusGeometry(0.25, 0.008, 4, 20, Math.PI * 0.9), M.gold, -0.28, 0.12, 0.52, 0, 0.5, Math.PI * 1.1);
+      break;
+    }
+    case 'tophat':
+      add(new THREE.CylinderGeometry(0.52, 0.52, 0.05, 32), M.black, 0, 0.9, 0);
+      add(new THREE.CylinderGeometry(0.34, 0.36, 0.55, 32), M.black, 0, 1.18, 0);
+      add(new THREE.CylinderGeometry(0.365, 0.365, 0.1, 32), soft(0xff7eb6), 0, 0.98, 0);
+      g.rotation.z = -0.12;
+      break;
+    case 'crown': {
+      add(new THREE.CylinderGeometry(0.34, 0.32, 0.22, 24, 1, true), Object.assign(M.gold.clone(), { side: THREE.DoubleSide }), 0, 0.96, 0);
+      for (let i = 0; i < 6; i++) {
+        const a = i / 6 * Math.PI * 2;
+        add(new THREE.ConeGeometry(0.07, 0.2, 10), M.gold, Math.sin(a) * 0.33, 1.15, Math.cos(a) * 0.33);
+        add(new THREE.SphereGeometry(0.035, 8, 6), soft(i % 2 ? 0xff4f8a : 0x5ad1ff), Math.sin(a) * 0.34, 1.0, Math.cos(a) * 0.34);
+      }
+      g.rotation.z = 0.1;
+      break;
+    }
+    case 'beret':
+      add(new THREE.SphereGeometry(0.46, 28, 16), soft(0x2b2440), 0.06, 0.86, -0.02, 0.2, 0, -0.25, 1, 0.32, 1);
+      add(new THREE.CylinderGeometry(0.02, 0.03, 0.1, 8), soft(0x2b2440), 0.1, 1.02, 0);
+      break;
+    case 'headphones':
+      add(new THREE.TorusGeometry(0.6, 0.05, 10, 32, Math.PI), soft(0x2b2b3a), 0, 0.38, 0);
+      for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.17, 0.17, 0.14, 24), soft(0xff7eb6), 0.58 * s, 0.34, 0, 0, 0, Math.PI / 2);
+      break;
+    case 'bowtie':
+      for (const s of [-1, 1]) add(new THREE.ConeGeometry(0.11, 0.2, 12), M.red, 0.1 * s, 0.02, 0.56, 0, 0, s * Math.PI / 2);
+      add(new THREE.SphereGeometry(0.05, 10, 8), M.red, 0, 0.02, 0.58);
+      break;
+    case 'sweatband':
+      add(new THREE.TorusGeometry(0.5, 0.07, 10, 36), soft(0xff4f6d), 0, 0.66, 0, Math.PI / 2 - 0.08);
+      break;
+    case 'wool':
+      for (let i = 0; i < 9; i++) {
+        const a = i / 9 * Math.PI * 2;
+        add(new THREE.SphereGeometry(0.16, 14, 10), soft(0xfff7ea, { roughness: 0.9, clearcoat: 0 }), Math.sin(a) * 0.25, 0.86 + (i % 2) * 0.05, Math.cos(a) * 0.22 - 0.03);
+      }
+      for (const s of [-1, 1]) add(new THREE.ConeGeometry(0.09, 0.3, 12), soft(shade(color, -0.1)), 0.36 * s, 0.95, 0, 0, 0, -s * 0.5);
+      break;
+    case 'bolt': {
+      const sh = new THREE.Shape();
+      sh.moveTo(0, 0.4); sh.lineTo(-0.16, 0); sh.lineTo(-0.02, 0); sh.lineTo(-0.1, -0.35); sh.lineTo(0.16, 0.08); sh.lineTo(0.02, 0.08); sh.lineTo(0.1, 0.4); sh.closePath();
+      const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.08, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
+      add(geo, soft(0xffd83d, { emissive: 0xffb000, emissiveIntensity: 0.5 }), 0, 1.15, -0.04, 0, 0, 0.2);
+      break;
+    }
+    case 'laptop': {
+      const lap = new THREE.Group(); lap.position.set(0.66, -0.25, 0.1); lap.rotation.set(0, 0, 0.2); g.add(lap);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.5), soft(0xd6dbe6, { metalness: 0.4 })); lap.add(base);
+      const scr = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.3, 0.46), soft(0x9fd6ff, { emissive: 0x6fb8ff, emissiveIntensity: 0.6 })); scr.position.set(0.04, 0, 0); lap.add(scr);
+      break;
+    }
+    case 'cape': {
+      const cape = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.9, 1.5, 24, 1, true, Math.PI * 0.62, Math.PI * 0.76), soft(0xc3163f, { side: THREE.DoubleSide }));
+      cape.position.set(0, -0.35, 0); g.add(cape); g.userData.cape = cape;
+      add(new THREE.TorusGeometry(0.56, 0.05, 8, 30), M.gold, 0, 0.35, 0, Math.PI / 2);
+      break;
+    }
+    case 'backpack':
+      add(new THREE.BoxGeometry(0.7, 0.8, 0.35), soft(0xffb84a), 0, -0.1, -0.62);
+      add(new THREE.BoxGeometry(0.5, 0.3, 0.1), soft(0xff8a3d), 0, -0.3, -0.83);
+      break;
+    case 'whale': {
+      const tail = new THREE.Group(); tail.position.set(0, -0.55, -0.55); g.add(tail);
+      const fl = new THREE.MeshPhysicalMaterial({ color: shade(color, -0.08), roughness: 0.4, clearcoat: 0.6 });
+      const stem = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.3, 6, 12), fl); stem.rotation.x = -0.9; stem.position.set(0, 0.05, -0.12); tail.add(stem);
+      for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 10), fl); f.scale.set(1.2, 0.25, 0.6); f.position.set(0.2 * s, 0.22, -0.3); f.rotation.y = s * 0.5; tail.add(f); }
+      g.userData.tail = tail;
+      // little spout
+      for (let i = 0; i < 3; i++) add(new THREE.SphereGeometry(0.05 + i * 0.015, 8, 6), soft(0xbfe6ff, { transparent: true, opacity: 0.85 }), (i - 1) * 0.06, 1.0 + i * 0.07, 0);
+      break;
+    }
+  }
+  shadowy(g);
+  return g;
+}
+
+function buildBean(color, label, acc = []) {
+  const root = new THREE.Group();
+  const rig = new THREE.Group(); root.add(rig);
+  const body = new THREE.Group(); body.position.y = 1.25; rig.add(body);
+  const skin = soft(color);
+  const belly = soft(shade(color, 0.12));
+
+  const trunk = new THREE.Mesh(G.capsule, skin); body.add(trunk);
+  const patch = new THREE.Mesh(new THREE.SphereGeometry(0.44, 24, 16), belly); patch.scale.set(1, 1.1, 0.35); patch.position.set(0, -0.2, 0.36); body.add(patch);
+
+  const face = new THREE.Group(); face.position.y = 0.38; body.add(face);
+  const eyes = [];
+  for (const s of [-1, 1]) {
+    const e = new THREE.Group(); e.position.set(0.19 * s, 0.02, 0.46); face.add(e);
+    const w = new THREE.Mesh(G.eye, M.white); w.scale.set(1, 1.12, 0.6); e.add(w);
+    const p = new THREE.Mesh(G.pupil, M.black); p.position.set(0, -0.01, 0.07); e.add(p);
+    const gl = new THREE.Mesh(G.glint, M.white); gl.position.set(0.03, 0.03, 0.14); e.add(gl);
+    eyes.push(e);
+    const ch = new THREE.Mesh(G.cheek, M.cheek); ch.scale.set(1, 0.6, 0.3); ch.position.set(0.33 * s, -0.16, 0.42); face.add(ch);
+  }
+  const mouth = new THREE.Mesh(G.smile, M.black); mouth.rotation.z = Math.PI; mouth.position.set(0, -0.17, 0.53); face.add(mouth);
+
+  const labelTex = makeCanvasTexture(256, 128, () => {});
+  const labelMesh = new THREE.Mesh(G.label, new THREE.MeshStandardMaterial({ map: labelTex, transparent: true, roughness: 0.5 }));
+  labelMesh.position.set(0, -0.28, 0.565); body.add(labelMesh);
+  const labelColors = [hex(shade(color, -0.28)), '#ffffff'];
+  drawLabel(labelTex, label, ...labelColors);
+
+  const arms = [];
+  for (const s of [-1, 1]) {
+    const pivot = new THREE.Group(); pivot.position.set(0.5 * s, -0.02, 0); body.add(pivot);
+    const a = new THREE.Mesh(G.arm, skin); a.position.y = -0.2; pivot.add(a);
+    const h = new THREE.Mesh(G.hand, belly); h.position.y = -0.4; pivot.add(h);
+    pivot.rotation.z = 0.28 * s; arms.push(pivot);
+  }
+  const legs = [];
+  for (const s of [-1, 1]) {
+    const pivot = new THREE.Group(); pivot.position.set(0.22 * s, 0.52, 0); rig.add(pivot);
+    const l = new THREE.Mesh(G.leg, skin); l.position.y = -0.16; pivot.add(l);
+    const f = new THREE.Mesh(G.foot, belly); f.scale.set(0.95, 0.55, 1.35); f.position.set(0, -0.4, 0.07); pivot.add(f);
+    legs.push(pivot);
+  }
+  const accs = acc.map(a => addAccessory(body, rig, a, color));
+  shadowy(rig);
+  labelMesh.castShadow = false;
+  return { root, rig, body, face, eyes, arms, legs, mouth, labelTex, labelColors, accs, skin };
+}
+
+// ---------------------------------------------------------------- audience
+const audience = [];
+(function buildAudience() {
+  const palette = [0xff8fb0, 0x7fd6b0, 0xffb877, 0x8fa6ff, 0xc79bff, 0xffdf6e, 0x6fd3f5, 0xff9fce];
+  for (const side of [-1, 1]) {
+    for (let row = 0; row < 3; row++) {
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.35 * (row + 1), 21), flat(0x3a2766));
+      riser.position.set(side * (3.3 + row * 1.15), 0.175 * (row + 1), -4.5); riser.receiveShadow = true; scene.add(riser);
+      for (let i = 0; i < 12; i++) {
+        const z = -13.5 + i * 1.6 + (row % 2) * 0.8 + (Math.random() - 0.5) * 0.3;
+        if (z > 6) continue;
+        const col = palette[(Math.random() * palette.length) | 0];
+        const g = new THREE.Group();
+        const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.3, 6, 14), soft(col)); b.position.y = 0.45; g.add(b);
+        for (const s of [-1, 1]) {
+          const e = new THREE.Mesh(G.eye, M.white); e.scale.setScalar(0.5); e.position.set(0.1 * s, 0.62, 0.22); g.add(e);
+          const p = new THREE.Mesh(G.pupil, M.black); p.scale.setScalar(0.5); p.position.set(0.1 * s, 0.61, 0.27); g.add(p);
+        }
+        // phone
+        const phone = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.02), new THREE.MeshStandardMaterial({ color: 0x222233, emissive: 0xffffff, emissiveIntensity: 0 }));
+        phone.position.set(0.2, 0.62, 0.3); phone.visible = Math.random() < 0.55; g.add(phone);
+        g.position.set(side * (3.3 + row * 1.15), 0.35 * (row + 1), z);
+        g.rotation.y = -side * Math.PI / 2 + side * 0.25;
+        shadowy(g); scene.add(g);
+        audience.push({ g, base: g.position.y, phase: Math.random() * 7, phone, flash: 0, side });
+      }
+    }
+  }
+})();
+
+// flash glow sprites
+const glowTex = makeCanvasTexture(128, 128, (ctx) => {
+  const r = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.25, 'rgba(255,255,255,0.6)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = r; ctx.fillRect(0, 0, 128, 128);
+});
+const glows = [];
+for (let i = 0; i < 14; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 }));
+  s.scale.setScalar(1.6); scene.add(s); glows.push({ s, life: 0 });
+}
+function cameraFlash(n = 1) {
+  const withPhones = audience.filter(a => a.phone.visible);
+  for (let k = 0; k < n; k++) {
+    const a = withPhones[(Math.random() * withPhones.length) | 0];
+    const gl = glows.find(g => g.life <= 0); if (!gl) return;
+    a.phone.getWorldPosition(gl.s.position); gl.life = 1; a.flash = 1;
+    flashLight.position.copy(gl.s.position); flashLight.intensity = 3;
+    sfx.shutter();
+  }
+}
+
+// ---------------------------------------------------------------- particles (confetti, puffs, coins, floating text)
+const CONF = 420;
+const confetti = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.09, 0.14), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), CONF);
+confetti.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const confData = [];
+{
+  const cols = [0xff7eb6, 0x7ef0ff, 0xffd36e, 0xa8ff9e, 0xc79bff, 0xffffff];
+  const c = new THREE.Color();
+  for (let i = 0; i < CONF; i++) {
+    confetti.setColorAt(i, c.setHex(cols[i % cols.length]));
+    confData.push({ p: new THREE.Vector3(0, -10, 0), v: new THREE.Vector3(), r: new THREE.Euler(), w: new THREE.Vector3(), alive: false });
+  }
+  confetti.instanceColor.needsUpdate = true;
+  scene.add(confetti);
+}
+let confNext = 0;
+function burstConfetti(center, n = 260) {
+  for (let k = 0; k < n; k++) {
+    const d = confData[confNext]; confNext = (confNext + 1) % CONF;
+    d.alive = true;
+    d.p.set(center.x + (Math.random() - 0.5) * 2, center.y + 6 + Math.random() * 3, center.z + (Math.random() - 0.5) * 4);
+    d.v.set((Math.random() - 0.5) * 3, -1 - Math.random() * 1.5, (Math.random() - 0.5) * 3);
+    d.w.set(Math.random() * 8, Math.random() * 8, Math.random() * 8);
+  }
+}
+const dummy = new THREE.Object3D();
+function updateConfetti(dt) {
+  for (let i = 0; i < CONF; i++) {
+    const d = confData[i];
+    if (d.alive) {
+      d.v.y = Math.max(d.v.y - dt * 1.2, -2.2);
+      d.p.addScaledVector(d.v, dt);
+      d.p.x += Math.sin(d.p.y * 3 + i) * dt * 0.6;
+      d.r.x += d.w.x * dt; d.r.y += d.w.y * dt; d.r.z += d.w.z * dt;
+      if (d.p.y < 0.52) { d.p.y = 0.52; d.v.set(0, 0, 0); d.w.set(0, 0, 0); d.r.x = -Math.PI / 2; }
+    }
+    dummy.position.copy(d.p); dummy.rotation.copy(d.r); dummy.updateMatrix();
+    confetti.setMatrixAt(i, dummy.matrix);
+  }
+  confetti.instanceMatrix.needsUpdate = true;
+}
+function clearConfetti() { confData.forEach(d => { d.alive = false; d.p.set(0, -10, 0); }); }
+
+const bits = []; // generic short-lived meshes/sprites
+const puffGeo = new THREE.SphereGeometry(0.18, 10, 8);
+const puffMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+const coinGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.03, 20);
+function spawnBit(obj, life, update) { scene.add(obj); bits.push({ obj, life, max: life, update }); }
+function updateBits(dt) {
+  for (let i = bits.length - 1; i >= 0; i--) {
+    const b = bits[i]; b.life -= dt; b.update(b, dt);
+    if (b.life <= 0) { scene.remove(b.obj); if (b.obj.material && b.obj.material !== puffMat && b.obj.material !== M.gold) { b.obj.material.map?.dispose(); b.obj.material.dispose(); } bits.splice(i, 1); }
+  }
+}
+function puff(pos, color = 0xffffff) {
+  const m = new THREE.Mesh(puffGeo, puffMat.clone()); m.material.color.setHex(color); m.position.copy(pos);
+  spawnBit(m, 0.6, (b, dt) => { const k = 1 - b.life / b.max; m.scale.setScalar(0.6 + k * 1.6); m.material.opacity = 0.7 * (1 - k); m.position.y += dt * 0.6; });
+}
+function coin(pos) {
+  const m = new THREE.Mesh(coinGeo, M.gold); m.position.set(pos.x + (Math.random() - 0.5) * 2, pos.y + 3, pos.z + (Math.random() - 0.5) * 1.5);
+  const vy = { v: 0 }; m.castShadow = true;
+  spawnBit(m, 2.2, (b, dt) => { vy.v -= 9 * dt; m.position.y = Math.max(0.52, m.position.y + vy.v * dt); if (m.position.y <= 0.52) vy.v *= -0.35; m.rotation.x += dt * 6; m.rotation.z += dt * 4; });
+}
+function floatText(text, pos, opts) {
+  const sp = makeBubble(text, opts); sp.position.copy(pos);
+  spawnBit(sp, 2.6, (b, dt) => { const k = 1 - b.life / b.max; const s = Math.min(1, k * 6); sp.scale.set(sp.userData.base.x * s * 1.4, sp.userData.base.y * s * 1.4, 1); sp.position.y += dt * 0.7; sp.material.opacity = k > 0.8 ? (1 - k) * 5 : 1; });
+}
+
+// ---------------------------------------------------------------- walkers
+const IN_X = -0.35, OUT_X = 1.2;
+let walkers = [];
+
+class Walker {
+  constructor(spec, index) {
+    this.spec = spec; this.index = index;
+    this.g = new Set(spec.gag);
+    const col = ORG[spec.o].c;
+    this.scale = this.g.has('big') ? 1.75 : this.g.has('tiny') ? 0.6 : 1;
+    this.speed = 3.0 * (this.g.has('fast') ? 2.6 : 1) * (this.g.has('slow') ? 0.5 : 1) * (this.g.has('big') ? 0.8 : 1) * (this.g.has('tiny') ? 1.15 : 1);
+    this.bean = buildBean(col, spec.l, spec.acc);
+    this.bean.rig.scale.setScalar(this.scale);
+    scene.add(this.bean.root);
+    this.x = IN_X; this.z = RUN_START - 1.2; this.y = 0.5;
+    this.heading = 0; this.targetHeading = this.g.has('moonwalk') ? Math.PI : 0;
+    this.state = 'in'; this.t = 0; this.phase = 0; this.thought = false;
+    this.bubble = null; this.bubbleI = 0; this.bubbleT = 1.2;
+    this.followers = [];
+    if (this.g.has('herd')) {
+      (spec.herd || []).forEach((lbl, i) => {
+        const f = buildBean(shade(col, (i - 1) * 0.08), lbl, spec.acc.slice(0, 1));
+        const s = spec.o === 'Alibaba' ? [0.55, 0.85, 1.25][i] || 1 : 0.95;
+        f.rig.scale.setScalar(s); scene.add(f.root);
+        this.followers.push({ bean: f, dx: (i % 2 ? 1 : -1) * (0.9 + i * 0.15), dz: -1.5 - i * 1.3, ph: i * 1.3, s });
+      });
+    }
+    if (this.g.has('ribbon')) {
+      const tex = makeCanvasTexture(512, 64, (ctx, w, h) => {
+        ctx.fillStyle = '#e9f1ff'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#3c6fd8'; ctx.font = '800 34px Nunito, sans-serif'; ctx.textBaseline = 'middle';
+        ctx.fillText('1 000 000 tokens · minns allt · ', 10, h / 2);
+      });
+      tex.wrapS = THREE.RepeatWrapping;
+      this.ribbon = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.55), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
+      this.ribbon.rotation.set(-Math.PI / 2, 0, Math.PI / 2); this.ribbon.receiveShadow = true; scene.add(this.ribbon);
+    }
+    if (this.g.has('glitch')) {
+      const extra = this.bean.legs[0].clone(); extra.position.x = 0; extra.position.z = -0.1; this.bean.rig.add(extra); this.extraLeg = extra;
+    }
+    this.renameI = 0;
+    this.stepSide = 0;
+  }
+
+  showBubble(text, opts) {
+    if (this.bubble) { scene.remove(this.bubble); this.bubble.material.map.dispose(); this.bubble.material.dispose(); }
+    this.bubble = makeBubble(text, opts); this.bubble.userData.age = 0; scene.add(this.bubble);
+  }
+
+  get headY() { return this.y + 2.35 * this.scale + (this.spec.acc.includes('tophat') ? 0.5 * this.scale : 0.2); }
+
+  update(dt, now) {
+    const b = this.bean, g = this.g;
+    this.t += dt;
+    let moving = false, poseAmt = 0;
+
+    if (this.state === 'in') {
+      const mid = (RUN_START + RUN_END) / 2 - 1;
+      if (g.has('think') && !this.thought && this.z > mid) { this.state = 'think'; this.t = 0; this.thought = true; this.showBubble('Tänker…', { bg: '#e9e2ff' }); }
+      else {
+        this.z += this.speed * dt; moving = true;
+        if (this.z >= RUN_END) { this.z = RUN_END; this.state = 'pose'; this.t = 0; this.onPose(); }
+      }
+    } else if (this.state === 'think') {
+      if (this.t > 2.4) { this.state = 'in'; this.t = 0; this.showBubble('Aha!'); }
+    } else if (this.state === 'pose') {
+      poseAmt = Math.min(1, this.t * 3);
+      const dur = g.has('marathon') ? 4.2 : 3.4;
+      if (Math.random() < dt * 3) cameraFlash(1);
+      if (this.t > dur) {
+        this.state = 'out'; this.t = 0; this.targetHeading = Math.PI; onWalkerLeaving(this);
+        this.heading = ((this.heading % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        if (this.heading > Math.PI * 1.5) this.heading -= Math.PI * 2;
+      }
+    } else if (this.state === 'out') {
+      if (this.t > 0.35) {
+        this.z -= Math.min(this.speed, 4.5) * dt; moving = true;
+        this.x += (OUT_X - this.x) * Math.min(1, dt * 2);
+        if (this.z < RUN_START - 1.5) { this.state = 'gone'; }
+      }
+    }
+
+    // heading
+    if (this.state === 'pose') this.targetHeading = g.has('spin') ? Math.min(1, this.t / 1.2) * Math.PI * 4 : 0;
+    if (this.state === 'in' && g.has('moonwalk')) this.targetHeading = Math.PI;
+    const dh = this.targetHeading - this.heading;
+    this.heading += dh * Math.min(1, dt * (this.state === 'pose' && g.has('spin') ? 30 : 7));
+
+    // walk cycle
+    const stepRate = (g.has('tiny') ? 13 : g.has('big') ? 5.5 : 8) * (g.has('fast') ? 1.6 : 1) * (g.has('slow') ? 0.6 : 1);
+    if (moving) this.phase += dt * stepRate;
+    const sw = moving ? Math.sin(this.phase) : 0;
+    const bob = moving ? Math.abs(Math.cos(this.phase)) * 0.09 : 0;
+    const moon = g.has('moonwalk') && this.state === 'in';
+    b.legs[0].rotation.x = moon ? Math.max(0, sw) * 0.5 : sw * 0.7;
+    b.legs[1].rotation.x = moon ? Math.max(0, -sw) * 0.5 : -sw * 0.7;
+    b.arms[0].rotation.x = -sw * 0.6; b.arms[1].rotation.x = sw * 0.6;
+    b.body.position.y = 1.25 + bob + Math.sin(now * 2.2 + this.index) * 0.02;
+    b.body.rotation.z = sw * 0.09; // sassy hips
+    b.body.rotation.y = moving ? Math.sin(this.phase) * 0.12 : 0;
+    b.arms[0].rotation.z = -0.28; b.arms[1].rotation.z = 0.28;
+
+    if (this.state === 'think') {
+      b.arms[1].rotation.x = -2.3; b.arms[1].rotation.z = -0.4;  // hand to chin
+      b.body.rotation.z = Math.sin(this.t * 2) * 0.12;
+      b.face.rotation.z = 0.15;
+    } else b.face.rotation.z *= 0.9;
+
+    if (this.state === 'pose') {
+      const w = Math.sin(this.t * 10);
+      b.arms[0].rotation.z = -0.28 - poseAmt * 2.5 - w * 0.25 * poseAmt;  // wave
+      b.arms[1].rotation.z = 0.28 + poseAmt * 0.9;  // hand on hip
+      b.arms[1].rotation.x = -0.4 * poseAmt;
+      b.body.rotation.z = Math.sin(this.t * 3) * 0.12 * poseAmt;
+      b.legs[0].rotation.z = -0.25 * poseAmt;
+      if (g.has('marathon')) { // jumping jacks
+        const j = Math.abs(Math.sin(this.t * 7));
+        b.rig.position.y = j * 0.35; b.arms[0].rotation.z = -0.3 - j * 2.4; b.arms[1].rotation.z = 0.3 + j * 2.4; b.arms[1].rotation.x = 0;
+        b.legs[0].rotation.z = -j * 0.35; b.legs[1].rotation.z = j * 0.35;
+      }
+    } else { b.rig.position.y *= 0.8; b.legs[0].rotation.z *= 0.8; b.legs[1].rotation.z *= 0.8; }
+
+    // blink
+    const blink = (now + this.index * 0.7) % 3.2 < 0.12 ? 0.1 : 1;
+    b.eyes.forEach(e => e.scale.y = blink);
+
+    // cape / tail sway
+    b.accs.forEach(a => {
+      if (a.userData.cape) a.userData.cape.rotation.x = -0.15 - (moving ? 0.25 + Math.sin(this.phase * 2) * 0.08 : 0);
+      if (a.userData.tail) a.userData.tail.rotation.x = Math.sin(now * 5) * 0.3;
+    });
+
+    // gags while moving
+    if (g.has('fast') && moving && Math.random() < dt * 22) puff(new THREE.Vector3(this.x + (Math.random() - 0.5) * 0.4, this.y + 0.15, this.z - 0.4 * Math.sign(Math.cos(this.heading))), 0xfff3d6);
+    if (g.has('big') && moving) {
+      const s = Math.sin(this.phase) > 0 ? 1 : -1;
+      if (s !== this.stepSide) { this.stepSide = s; shake = 0.14 * this.scale; sfx.thud(); }
+    }
+    if (g.has('coins') && (moving || this.state === 'pose') && Math.random() < dt * 5) coin(new THREE.Vector3(this.x, this.y, this.z));
+    if (g.has('glitch')) {
+      const gl = Math.random() < 0.06;
+      b.rig.position.x = gl ? (Math.random() - 0.5) * 0.3 : 0;
+      b.body.scale.set(gl ? 1.2 : 1, gl ? 0.8 : 1, 1);
+      this.extraLeg.rotation.x = Math.sin(this.phase * 1.7) * 0.9;
+      b.skin.emissive.setHex(gl ? 0x55ffff : 0x000000);
+    }
+    if (g.has('rename')) {
+      this.renameT = (this.renameT || 0) + dt;
+      if (this.renameT > 0.55) { this.renameT = 0; const names = ['4.1', '4o', 'o1', 'o3', '4.5', '4.1?', 'o4', '??']; this.renameI = (this.renameI + 1) % names.length; drawLabel(b.labelTex, names[this.renameI], ...b.labelColors); }
+    }
+
+    // position
+    b.root.position.set(this.x, this.y, this.z);
+    b.root.rotation.y = this.heading;
+
+    // followers
+    this.followers.forEach(f => {
+      const fb = f.bean;
+      const dir = this.state === 'out' ? -1 : 1;
+      const tx = this.x + f.dx, tz = this.z + f.dz * dir;
+      fb.root.position.x += (tx - fb.root.position.x) * Math.min(1, dt * 4);
+      fb.root.position.z += (tz - fb.root.position.z) * Math.min(1, dt * 4);
+      fb.root.position.y = this.y;
+      fb.root.rotation.y = this.heading;
+      const fsw = moving ? Math.sin(this.phase + f.ph) : 0;
+      fb.legs[0].rotation.x = fsw * 0.7; fb.legs[1].rotation.x = -fsw * 0.7;
+      fb.arms[0].rotation.x = -fsw * 0.6; fb.arms[1].rotation.x = fsw * 0.6;
+      fb.body.position.y = 1.25 + (moving ? Math.abs(Math.cos(this.phase + f.ph)) * 0.09 : 0);
+      if (this.state === 'pose') { fb.arms[0].rotation.z = -0.3 - Math.abs(Math.sin(this.t * 8 + f.ph)) * 2.4; fb.rig.position.y = Math.abs(Math.sin(this.t * 6 + f.ph)) * 0.3; }
+      else { fb.arms[0].rotation.z = -0.28; fb.rig.position.y = 0; }
+      const fbl = (now + f.ph) % 2.8 < 0.12 ? 0.1 : 1; fb.eyes.forEach(e => e.scale.y = fbl);
+    });
+
+    // ribbon
+    if (this.ribbon) {
+      const zStart = RUN_START - 1.8, zEnd = this.z - 0.4;
+      const len = Math.max(0.01, zEnd - zStart);
+      this.ribbon.scale.set(len, 1, 1);
+      this.ribbon.position.set(this.x, 0.515, zStart + len / 2);
+      this.ribbon.material.map.repeat.set(len / 3.5, 1);
+      this.ribbon.material.map.offset.x = -now * 0.2;
+    }
+
+    // speech bubbles
+    const texts = this.spec.b || [];
+    if (this.state !== 'think' && this.state !== 'out' && texts.length) {
+      this.bubbleT -= dt;
+      if (this.bubbleT <= 0 && this.bubbleI < texts.length) {
+        this.showBubble(texts[this.bubbleI++]); sfx.blip();
+        this.bubbleT = g.has('talk') ? 1.2 : 1.8;
+      }
+    }
+    if (this.state === 'out' && this.bubble && this.t > 0.6) { scene.remove(this.bubble); this.bubble = null; }
+    if (this.bubble) {
+      const a = (this.bubble.userData.age += dt);
+      const s = a < 0.25 ? 1 + Math.sin(a / 0.25 * Math.PI) * 0.25 : 1;
+      const k = Math.min(1, a * 6) * s;
+      this.bubble.scale.set(this.bubble.userData.base.x * k, this.bubble.userData.base.y * k, 1);
+      this.bubble.position.set(this.x, this.headY + (this.state === 'think' ? Math.sin(now * 4) * 0.08 : 0), this.z);
+    }
+  }
+
+  onPose() {
+    const center = new THREE.Vector3(this.x, 1, this.z);
+    cameraFlash(4); sfx.cheer();
+    if (this.g.has('confetti')) { burstConfetti(center); sfx.pop(); }
+    if (this.g.has('crash')) floatText('Chipbörsen: −17 %', new THREE.Vector3(this.x - 1.6, this.headY + 0.6, this.z), { bg: '#ff4f6d', fg: '#ffffff' });
+    if (this.g.has('big')) { shake = 0.35; }
+    audience.forEach(a => a.cheer = 2 + Math.random());
+  }
+
+  dispose() {
+    const rm = (bean) => { scene.remove(bean.root); bean.labelTex.dispose(); };
+    rm(this.bean); this.followers.forEach(f => rm(f.bean));
+    if (this.bubble) scene.remove(this.bubble);
+    if (this.ribbon) { scene.remove(this.ribbon); this.ribbon.geometry.dispose(); }
+  }
+}
+
+// ---------------------------------------------------------------- show control
+let current = 0;
+let paused = false;
+let tempo = 1;
+let shake = 0;
+let spawnedFor = new Set();
+
+function onWalkerLeaving(w) {
+  if (spawnedFor.has(w)) return; spawnedFor.add(w);
+  goTo((w.index + 1) % MODELS.length, false);
+}
+
+function goTo(i, hard) {
+  if (hard) { walkers.forEach(w => w.dispose()); walkers = []; clearConfetti(); spawnedFor = new Set(); }
+  current = i;
+  walkers.push(new Walker(MODELS[i], i));
+  updateCard();
+  save();
+}
+
+// ---------------------------------------------------------------- HUD
+const $ = (id) => document.getElementById(id);
+$('count').textContent = MODELS.length;
+const tl = $('timeline');
+MODELS.forEach((m, i) => {
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.style.background = ORG[m.o].css; btn.style.color = ORG[m.o].css;
+  btn.title = `${m.n} · ${m.d}`; btn.setAttribute('aria-label', `Hoppa till ${m.n}`);
+  btn.addEventListener('click', () => goTo(i, true));
+  tl.appendChild(btn);
+});
+{
+  // year labels positioned by first model of each year
+  const years = $('years');
+  const firsts = {}; MODELS.forEach((m, i) => { const y = (m.d.match(/20\d\d/) || [''])[0]; if (y && !(y in firsts)) firsts[y] = i; });
+  Object.keys(firsts).forEach(y => { const s = document.createElement('span'); s.textContent = y; s.style.left = (firsts[y] / MODELS.length * 100) + '%'; years.appendChild(s); });
+}
+function updateCard() {
+  const m = MODELS[current];
+  $('idx').textContent = `Modell ${String(current + 1).padStart(2, '0')} av ${MODELS.length}`;
+  $('name').textContent = m.n;
+  $('meta').textContent = `${m.o === '???' ? 'Okänt labb' : m.o} · ${m.d}`;
+  $('joke').textContent = m.j;
+  $('orgdot').style.background = ORG[m.o].css; $('orgdot').style.color = ORG[m.o].css;
+  const card = $('card'); card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop');
+  [...tl.children].forEach((b, i) => { b.classList.toggle('now', i === current); b.classList.toggle('done', i < current); });
+}
+$('prev').addEventListener('click', () => goTo((current - 1 + MODELS.length) % MODELS.length, true));
+$('next').addEventListener('click', () => goTo((current + 1) % MODELS.length, true));
+$('play').addEventListener('click', (e) => { paused = !paused; e.currentTarget.textContent = paused ? 'Spela' : 'Paus'; e.currentTarget.setAttribute('aria-pressed', String(paused)); });
+$('tempo').addEventListener('click', (e) => { tempo = tempo === 1 ? 2 : tempo === 2 ? 0.5 : 1; e.currentTarget.textContent = `Tempo ${tempo === 0.5 ? '½' : tempo}×`; });
+$('sound').addEventListener('click', (e) => { const on = sfx.toggle(); e.currentTarget.textContent = on ? 'Musik av' : 'Musik på'; e.currentTarget.setAttribute('aria-pressed', String(on)); });
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') $('next').click();
+  else if (e.key === 'ArrowLeft') $('prev').click();
+  else if (e.key === ' ' && document.activeElement === document.body) { e.preventDefault(); $('play').click(); }
+});
+
+function save() { try { localStorage.setItem('aiCatwalkIndex', String(current)); } catch (e) {} }
+function load() { try { const v = parseInt(localStorage.getItem('aiCatwalkIndex'), 10); return Number.isFinite(v) && v >= 0 && v < MODELS.length ? v : 0; } catch (e) { return 0; } }
+
+// ---------------------------------------------------------------- audio (synthesized runway beat)
+const sfx = (() => {
+  let ctx = null, master = null, on = false, timer = null, step = 0, nextTime = 0;
+  const BPM = 118, STEP = 60 / BPM / 4;
+  const bass = [45, 0, 45, 0, 0, 45, 0, 48, 45, 0, 45, 0, 52, 0, 50, 48];
+  const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  function noise(dur) { const b = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = ctx.createBufferSource(); s.buffer = b; return s; }
+  function env(node, t, a, peak, dec) { node.gain.setValueAtTime(0.0001, t); node.gain.exponentialRampToValueAtTime(peak, t + a); node.gain.exponentialRampToValueAtTime(0.0001, t + a + dec); }
+  function kick(t) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.15); env(g, t, 0.002, 0.9, 0.3); o.connect(g).connect(master); o.start(t); o.stop(t + 0.35); }
+  function hat(t, open) { const n = noise(0.2), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = 'highpass'; f.frequency.value = 7000; env(g, t, 0.001, open ? 0.18 : 0.08, open ? 0.12 : 0.03); n.connect(f).connect(g).connect(master); n.start(t); n.stop(t + 0.2); }
+  function clap(t) { const n = noise(0.3), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = 'bandpass'; f.frequency.value = 1500; env(g, t, 0.002, 0.35, 0.16); n.connect(f).connect(g).connect(master); n.start(t); n.stop(t + 0.3); }
+  function bassNote(t, m) { const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = mtof(m); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(200, t + 0.2); env(g, t, 0.005, 0.28, 0.2); o.connect(f).connect(g).connect(master); o.start(t); o.stop(t + 0.3); }
+  function tick() {
+    while (nextTime < ctx.currentTime + 0.12) {
+      const s = step % 16;
+      if (s % 4 === 0) kick(nextTime);
+      if (s === 4 || s === 12) clap(nextTime);
+      hat(nextTime, s % 4 === 2);
+      if (bass[s]) bassNote(nextTime, bass[s]);
+      nextTime += STEP; step++;
+    }
+  }
+  function blipTone(freq, dur, type = 'sine', vol = 0.15) {
+    if (!on) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq * 1.5, t + dur);
+    env(g, t, 0.005, vol, dur); o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.05);
+  }
+  return {
+    toggle() {
+      if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false; ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.35; master.connect(ctx.destination); }
+      on = !on;
+      if (on) { ctx.resume(); nextTime = ctx.currentTime + 0.05; timer = setInterval(tick, 25); }
+      else { clearInterval(timer); }
+      return on;
+    },
+    blip() { blipTone(700 + Math.random() * 300, 0.08, 'triangle', 0.12); },
+    pop() { blipTone(300, 0.2, 'square', 0.1); },
+    thud() { if (!on) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(30, t + 0.2); env(g, t, 0.003, 0.6, 0.22); o.connect(g).connect(master); o.start(t); o.stop(t + 0.3); },
+    shutter() { if (!on) return; const t = ctx.currentTime, n = noise(0.06), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = 'highpass'; f.frequency.value = 3000; env(g, t, 0.001, 0.12, 0.04); n.connect(f).connect(g).connect(master); n.start(t); n.stop(t + 0.07); },
+    cheer() { if (!on) return; const t = ctx.currentTime, n = noise(1.6), f = ctx.createBiquadFilter(), g = ctx.createGain(); f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 0.6; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5); n.connect(f).connect(g).connect(master); n.start(t); n.stop(t + 1.6); },
+  };
+})();
+
+// ---------------------------------------------------------------- camera + loop
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const camTarget = new THREE.Vector3(0, 1.6, 0);
+const camPos = new THREE.Vector3(6, 4.5, 14);
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = w / h < 0.8 ? 62 : 42;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); resize();
+
+const clock = new THREE.Clock();
+let elapsed = 0;
+function frame() {
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+  const dt = paused ? 0 : rawDt * tempo;
+  elapsed += dt;
+
+  walkers.forEach(w => w.update(dt, elapsed));
+  for (let i = walkers.length - 1; i >= 0; i--) if (walkers[i].state === 'gone') { walkers[i].dispose(); walkers.splice(i, 1); }
+
+  // audience
+  audience.forEach(a => {
+    a.cheer = Math.max(0, (a.cheer || 0) - dt);
+    const hop = a.cheer > 0 ? Math.abs(Math.sin(elapsed * 9 + a.phase)) * 0.3 : Math.abs(Math.sin(elapsed * 2 + a.phase)) * 0.04;
+    a.g.position.y = a.base + hop;
+    a.flash = Math.max(0, a.flash - dt * 4);
+    a.phone.material.emissiveIntensity = a.flash * 4 + 0.15;
+  });
+  if (!paused && Math.random() < dt * 0.8) cameraFlash(1);
+  glows.forEach(gl => { gl.life = Math.max(0, gl.life - dt * 5); gl.s.material.opacity = gl.life; gl.s.scale.setScalar(1 + (1 - gl.life) * 1.5); });
+  flashLight.intensity = Math.max(0, flashLight.intensity - dt * 18);
+
+  updateConfetti(dt);
+  updateBits(dt);
+
+  // camera follows the star of the moment
+  const star = walkers.find(w => w.index === current) || walkers[0];
+  const portrait = camera.aspect < 0.8;
+  if (star) {
+    const posing = star.state === 'pose';
+    const sc = star.scale;
+    const focusZ = star.z;
+    const tgt = new THREE.Vector3(star.x * 0.5, 1.2 + sc * 0.9, focusZ);
+    const sway = reduceMotion ? 0 : Math.sin(elapsed * 0.25) * 1.5;
+    const dist = (posing ? 7 : 9.5) * (0.55 + sc * 0.45) * (portrait ? 1.35 : 1);
+    const pos = new THREE.Vector3(3.2 + sway, 2.6 + sc * 1.1 + (posing ? 0 : 0.8), focusZ + dist);
+    pos.z = Math.min(pos.z, RUN_END + 11 * (portrait ? 1.4 : 1));
+    camTarget.lerp(tgt, Math.min(1, rawDt * 2.2));
+    camPos.lerp(pos, Math.min(1, rawDt * 1.4));
+  }
+  shake = Math.max(0, shake - rawDt * 1.2);
+  camera.position.copy(camPos);
+  if (shake > 0 && !reduceMotion) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, 0));
+  camera.lookAt(camTarget);
+
+  rimL.intensity = 1.1 + Math.sin(elapsed * 1.3) * 0.3;
+  rimR.intensity = 1.0 + Math.cos(elapsed * 1.1) * 0.3;
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+function start(data) {
+  const i = data && Number.isInteger(data.current) ? data.current : load();
+  goTo(i, true);
+  requestAnimationFrame(frame);
+}
+window.claude?.hot?.snapshot?.(() => ({ current }));
+const boot = () => (window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {}));
+// wait briefly for fonts so the chest labels use the display face
+const fontsReady = document.fonts && document.fonts.load
+  ? Promise.all([document.fonts.load('400 40px "Bagel Fat One"'), document.fonts.load('800 40px Nunito')]).catch(() => {})
+  : Promise.resolve();
+Promise.race([fontsReady, new Promise(r => setTimeout(r, 1500))]).then(() => {
+  const { canvas: c, ctx } = wallTex.userData; drawWall(ctx, c.width, c.height); wallTex.needsUpdate = true;
+  boot();
+});
+})();
+</script>
+</body>
+</html>
